@@ -837,7 +837,7 @@ async function fetchQuestion(){
   const chapters = (g.world && g.world.chapters) || [];
   const params = { slug: g.student.slug, monsterType: 'match',
     excludeIds: M.askedIds.filter(id => !String(id).startsWith('fb')).join(',') };
-  if(chapters.length) params.topicId = chapters[Math.floor(Math.random()*chapters.length)].id;
+  if(chapters.length) params.topicIds = chapters.map(c => c.id).join(',');
   if(M.sessionId){
     const res = await ctx.api('getQuestionForBattle', params);
     if(res && res.status === 'success' && res.question && res.question.options){

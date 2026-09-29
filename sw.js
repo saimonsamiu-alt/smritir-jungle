@@ -1,5 +1,5 @@
 // Service Worker — স্মৃতির জঙ্গল (standalone game PWA, scope: ./game/)
-const CACHE_NAME = 'smritir-jungle-v16';
+const CACHE_NAME = 'smritir-jungle-v17';
 const PRECACHE = [
   './',
   './index.html',
