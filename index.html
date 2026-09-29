@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0A1410">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>স্মৃতির জঙ্গল — পরীক্ষার খাতা 3D গেম</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+:root{
+  --bg:#070D0B; --panel:rgba(11,22,18,.86); --panel2:rgba(17,32,26,.92);
+  --line:rgba(120,220,180,.16); --txt:#E8F5EF; --dim:#8FB8A6;
+  --accent:#FF8A3C; --accent2:#FFC46B; --teal:#3EC6B8; --red:#E8442E; --green:#4CD97B;
+  --hp:#4CD97B; --xp:#3EC6B8; --coin:#FFC94D;
+  --shadow:0 10px 40px rgba(0,0,0,.55);
+}
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; overflow:hidden; background:var(--bg); }
+body{
+  font-family:'Noto Sans Bengali','Hind Siliguri',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  color:var(--txt); user-select:none; -webkit-user-select:none; touch-action:none;
+  overscroll-behavior:none;
+}
+#gl{ position:fixed; inset:0; width:100%; height:100%; display:block; }
+.hidden{ display:none !important; }
+button{ font-family:inherit; cursor:pointer; border:none; }
+
+/* ---------- overlays ---------- */
+#vignette{ position:fixed; inset:0; pointer-events:none; z-index:5;
+  background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.5) 100%); }
+#damage-flash{ position:fixed; inset:0; pointer-events:none; z-index:6; opacity:0;
+  background:radial-gradient(ellipse at center, rgba(232,68,46,.12) 40%, rgba(232,68,46,.55) 100%);
+  transition:opacity .12s; }
+#damage-flash.on{ opacity:1; }
+#heal-flash{ position:fixed; inset:0; pointer-events:none; z-index:6; opacity:0;
+  background:radial-gradient(ellipse at center, transparent 45%, rgba(76,217,123,.35) 100%);
+  transition:opacity .2s; }
+#heal-flash.on{ opacity:1; }
+#fade-black{ position:fixed; inset:0; background:#000; z-index:60; pointer-events:none; opacity:0; transition:opacity .45s; }
+#fade-black.on{ opacity:1; pointer-events:all; }
+
+/* ---------- screens ---------- */
+.screen{ position:fixed; inset:0; z-index:40; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:18px; padding:24px; text-align:center; }
+.scrim{ background:linear-gradient(180deg, rgba(6,10,16,.35) 0%, rgba(6,10,16,.82) 78%); }
+.solid{ background:radial-gradient(1200px 700px at 50% 18%, #12281F 0%, #050A08 70%); }
+
+.g-logo{ width:96px; height:96px; border-radius:26px; box-shadow:0 12px 44px rgba(255,138,60,.35), var(--shadow); }
+.g-title{ font-size:clamp(34px,7vw,58px); font-weight:800; letter-spacing:.5px; line-height:1.15;
+  background:linear-gradient(180deg,#FFF3E2 10%, var(--accent) 60%, #C24E1E 100%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  filter:drop-shadow(0 4px 18px rgba(255,138,60,.35)); }
+.g-sub{ color:var(--dim); font-size:clamp(13px,2.6vw,16px); letter-spacing:.3px; }
+.g-brand{ display:inline-flex; align-items:center; gap:8px; margin-top:2px; padding:6px 14px;
+  border:1px solid var(--line); border-radius:999px; background:rgba(62,198,184,.08);
+  color:var(--teal); font-size:13px; font-weight:600; }
+
+.btn{ position:relative; display:inline-flex; align-items:center; justify-content:center; gap:10px;
+  padding:15px 34px; border-radius:16px; font-size:18px; font-weight:700; color:#1A0E05;
+  background:linear-gradient(180deg, var(--accent2), var(--accent) 60%, #E0651F);
+  box-shadow:0 8px 26px rgba(255,138,60,.4), inset 0 1px 0 rgba(255,255,255,.5);
+  transition:transform .12s, box-shadow .12s; overflow:hidden; }
+.btn:active{ transform:scale(.96); }
+.btn.ghost{ background:rgba(120,180,220,.08); color:var(--txt); border:1px solid var(--line);
+  box-shadow:none; font-weight:600; }
+.btn.danger{ background:linear-gradient(180deg,#FF7A64,var(--red)); color:#fff;
+  box-shadow:0 8px 24px rgba(232,68,46,.4); }
+.btn.small{ padding:10px 20px; font-size:15px; border-radius:12px; }
+.btn[disabled]{ opacity:.55; pointer-events:none; }
+
+.player-chip{ display:flex; align-items:center; gap:12px; padding:10px 18px 10px 10px;
+  background:var(--panel); border:1px solid var(--line); border-radius:999px; box-shadow:var(--shadow); }
+.player-chip img{ width:42px; height:42px; border-radius:50%; border:2px solid var(--accent); }
+.player-chip .pc-mid{ text-align:left; }
+.player-chip .pc-name{ font-weight:700; font-size:15px; }
+.player-chip .pc-lv{ color:var(--dim); font-size:12px; }
+.chip-xp{ min-width:120px; }
+.xpbar{ height:6px; border-radius:99px; background:rgba(255,255,255,.1); overflow:hidden; margin-top:4px; }
+.xpbar > i{ display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--teal),#7CE8DD); }
+
+/* loading */
+#screen-loading .ld-bar{ width:min(420px,72vw); height:10px; border-radius:99px;
+  background:rgba(255,255,255,.08); overflow:hidden; border:1px solid var(--line); }
+#screen-loading .ld-bar > i{ display:block; height:100%; width:0%;
+  background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:99px; transition:width .25s; }
+#ld-msg{ color:var(--dim); font-size:14px; min-height:20px; }
+
+/* login */
+.login-card{ width:min(420px,92vw); background:var(--panel2); border:1px solid var(--line);
+  border-radius:22px; padding:26px 24px; box-shadow:var(--shadow); backdrop-filter:blur(14px);
+  display:flex; flex-direction:column; gap:14px; text-align:left; }
+.login-card h2{ font-size:22px; text-align:center; }
+.login-card .hint{ text-align:center; color:var(--dim); font-size:13px; }
+.inp{ width:100%; padding:14px 16px; border-radius:14px; border:1px solid var(--line);
+  background:rgba(255,255,255,.05); color:var(--txt); font-size:16px; font-family:inherit; outline:none; }
+.inp:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(255,138,60,.15); }
+.err{ color:#FF9A8A; font-size:13px; text-align:center; min-height:18px; }
+.back-link{ color:var(--dim); font-size:14px; background:none; text-decoration:underline; }
+
+/* ---------- HUD (world) ---------- */
+#hud{ position:fixed; inset:0; z-index:20; pointer-events:none; }
+#hud .hud-top{ position:absolute; top:0; left:0; right:0; display:flex; align-items:flex-start;
+  justify-content:space-between; gap:10px; padding:calc(10px + env(safe-area-inset-top)) 12px 0; }
+.hud-panel{ background:var(--panel); border:1px solid var(--line); border-radius:16px;
+  padding:10px 12px; box-shadow:var(--shadow); backdrop-filter:blur(10px); }
+#hud-left{ display:flex; flex-direction:column; gap:8px; min-width:min(230px,44vw); }
+.bar{ position:relative; height:16px; border-radius:99px; background:rgba(0,0,0,.45); overflow:hidden;
+  border:1px solid rgba(255,255,255,.09); }
+.bar > i{ display:block; height:100%; border-radius:99px; transition:width .35s ease; }
+.bar.hp > i{ background:linear-gradient(90deg,#2FA35C,var(--hp)); box-shadow:0 0 12px rgba(76,217,123,.5); }
+.bar.xp{ height:10px; } .bar.xp > i{ background:linear-gradient(90deg,#1E8F84,var(--xp)); }
+.bar .bar-txt{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:10.5px; font-weight:700; text-shadow:0 1px 2px #000; letter-spacing:.4px; }
+#hud-name-row{ display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--dim); }
+#hud-name-row b{ color:var(--txt); font-size:13px; }
+#hud-objective{ max-width:min(420px,52vw); font-size:13px; color:var(--accent2);
+  background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:9px 14px;
+  box-shadow:var(--shadow); text-align:center; backdrop-filter:blur(10px); }
+#hud-right{ display:flex; align-items:center; gap:8px; pointer-events:auto; }
+#hud-coins{ font-weight:800; color:var(--coin); font-size:15px; background:var(--panel);
+  border:1px solid var(--line); padding:9px 14px; border-radius:14px; box-shadow:var(--shadow); }
+.icon-btn{ width:42px; height:42px; border-radius:14px; background:var(--panel); border:1px solid var(--line);
+  color:var(--txt); font-size:17px; box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center; }
+#hud-hint{ position:absolute; bottom:calc(14px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%);
+  color:var(--dim); font-size:12px; background:rgba(10,14,20,.6); padding:6px 12px; border-radius:99px;
+  border:1px solid var(--line); white-space:nowrap; }
+
+/* joystick */
+#joystick{ position:fixed; z-index:22; width:128px; height:128px; border-radius:50%;
+  background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.14);
+  backdrop-filter:blur(4px); display:none; pointer-events:none; }
+#joystick-knob{ position:absolute; left:50%; top:50%; width:54px; height:54px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #FFD9AE, var(--accent) 70%);
+  box-shadow:0 4px 14px rgba(0,0,0,.5); transform:translate(-50%,-50%); }
+
+/* ---------- battle HUD ---------- */
+#battle-hud{ position:fixed; inset:0; z-index:24; pointer-events:none; }
+#battle-hud .bh-top{ position:absolute; top:calc(8px + env(safe-area-inset-top)); left:10px; right:10px;
+  display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.bh-box{ background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:10px 14px;
+  box-shadow:var(--shadow); backdrop-filter:blur(10px); min-width:min(240px,42vw); }
+.bh-label{ font-size:11px; color:var(--dim); letter-spacing:.5px; margin-bottom:5px; display:flex; justify-content:space-between; gap:8px; }
+.bh-label b{ color:var(--txt); }
+.bar.mhp{ height:18px; } .bar.mhp > i{ background:linear-gradient(90deg,#8E2413,var(--red)); box-shadow:0 0 14px rgba(232,68,46,.55); }
+#battle-combo{ margin-top:6px; font-weight:800; font-size:13px; color:var(--accent2); min-height:17px;
+  text-shadow:0 0 14px rgba(255,196,107,.6); }
+#battle-timer{ position:absolute; top:calc(66px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
+  width:64px; height:64px; }
+#battle-timer svg{ width:100%; height:100%; transform:rotate(-90deg); }
+#battle-timer .tr-bg{ fill:rgba(0,0,0,.5); stroke:rgba(255,255,255,.12); stroke-width:5; }
+#battle-timer .tr-fg{ fill:none; stroke:var(--accent2); stroke-width:5; stroke-linecap:round;
+  filter:drop-shadow(0 0 6px rgba(255,196,107,.8)); transition:stroke .3s; }
+#battle-timer.danger .tr-fg{ stroke:var(--red); }
+#battle-timer .tr-num{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:19px; text-shadow:0 2px 4px #000; }
+
+/* question panel */
+#q-panel{ position:fixed; z-index:26; left:50%; transform:translateX(-50%);
+  bottom:calc(10px + env(safe-area-inset-bottom)); width:min(760px,96vw);
+  background:var(--panel2); border:1px solid var(--line); border-radius:20px; padding:16px;
+  box-shadow:var(--shadow); backdrop-filter:blur(16px);
+  display:flex; flex-direction:column; gap:12px;
+  animation:qp-in .35s cubic-bezier(.2,.9,.3,1.2); }
+@keyframes qp-in{ from{ transform:translate(-50%,40px); opacity:0; } to{ transform:translate(-50%,0); opacity:1; } }
+#q-text{ font-size:clamp(15px,2.6vw,18px); line-height:1.55; font-weight:600; text-align:left;
+  max-height:30vh; overflow-y:auto; padding:2px 4px; }
+#q-opts{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.opt{ display:flex; align-items:center; gap:10px; text-align:left; padding:12px 13px; border-radius:14px;
+  background:rgba(255,255,255,.05); border:1px solid var(--line); color:var(--txt);
+  font-size:15px; line-height:1.4; transition:transform .1s, background .15s, border-color .15s; }
+.opt:active{ transform:scale(.97); }
+.opt .k{ flex:0 0 auto; width:28px; height:28px; border-radius:9px; display:flex; align-items:center;
+  justify-content:center; font-weight:800; font-size:13px; background:rgba(255,255,255,.1); }
+.opt.sel-right{ background:rgba(76,217,123,.16); border-color:var(--green); }
+.opt.sel-right .k{ background:var(--green); color:#06280F; }
+.opt.sel-wrong{ background:rgba(232,68,46,.18); border-color:var(--red); }
+.opt.sel-wrong .k{ background:var(--red); color:#fff; }
+.opt.reveal-right{ border-color:var(--green); box-shadow:0 0 0 1px var(--green), 0 0 16px rgba(76,217,123,.3); }
+.opt[disabled]{ pointer-events:none; }
+@media (max-width:640px){ #q-opts{ grid-template-columns:1fr; } }
+
+/* দেবদূত — পুরোনো ভুলের রিভিউ */
+#q-angel{ display:flex; flex-direction:column; gap:6px; }
+.ang{ font-size:12.5px; line-height:1.55; padding:8px 12px; border-radius:12px; border:1px solid; }
+.ang.good{ background:rgba(126,196,255,.10); border-color:rgba(126,196,255,.42); color:#CFEAFF; }
+.ang.bad{ background:rgba(190,140,255,.10); border-color:rgba(190,140,255,.38); color:#E4D4FF; }
+#btn-hud-review{ position:relative; }
+#btn-hud-review .badge{ position:absolute; top:-6px; right:-6px; min-width:19px; height:19px;
+  border-radius:99px; background:#E8442E; color:#fff; font-size:11px; font-weight:800;
+  display:flex; align-items:center; justify-content:center; padding:0 4px;
+  border:1.5px solid rgba(0,0,0,.35); }
+
+/* floaters (damage numbers etc.) */
+.floater{ position:fixed; z-index:30; pointer-events:none; font-weight:900; font-size:26px;
+  text-shadow:0 2px 8px #000, 0 0 18px currentColor; animation:flt 1s ease-out forwards; }
+@keyframes flt{ 0%{ transform:translate(-50%,-50%) scale(.6); opacity:0; }
+  18%{ transform:translate(-50%,-90%) scale(1.15); opacity:1; }
+  100%{ transform:translate(-50%,-190%) scale(1); opacity:0; } }
+
+/* toast */
+#toast{ position:fixed; z-index:70; left:50%; bottom:15vh; transform:translateX(-50%) translateY(20px);
+  background:var(--panel2); border:1px solid var(--line); color:var(--txt); padding:11px 20px;
+  border-radius:14px; font-size:14px; font-weight:600; box-shadow:var(--shadow); opacity:0;
+  transition:opacity .25s, transform .25s; pointer-events:none; max-width:88vw; text-align:center; }
+#toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* in-world dialogue subtitle */
+#subtitle{ position:fixed; z-index:68; left:50%; bottom:20vh; transform:translateX(-50%) translateY(14px);
+  max-width:min(720px,90vw); text-align:center; font-size:clamp(14px,2.5vw,17px); font-weight:600;
+  line-height:1.55; color:#EAF6F0; background:rgba(6,14,12,.72); border:1px solid rgba(120,200,170,.22);
+  border-radius:16px; padding:11px 18px; box-shadow:var(--shadow); backdrop-filter:blur(10px);
+  opacity:0; transition:opacity .3s, transform .3s; pointer-events:none; text-shadow:0 2px 8px #000; }
+#subtitle.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* victory / defeat / pause cards */
+.end-card{ width:min(460px,94vw); background:var(--panel2); border:1px solid var(--line); border-radius:26px;
+  padding:30px 26px; box-shadow:var(--shadow); backdrop-filter:blur(18px);
+  display:flex; flex-direction:column; gap:14px; align-items:center;
+  animation:card-in .45s cubic-bezier(.2,.9,.3,1.15); }
+@keyframes card-in{ from{ transform:scale(.8) translateY(30px); opacity:0; } to{ transform:none; opacity:1; } }
+.end-emoji{ font-size:60px; filter:drop-shadow(0 6px 20px rgba(0,0,0,.5)); }
+.end-title{ font-size:30px; font-weight:800; }
+#screen-victory .end-title{ color:var(--accent2); text-shadow:0 0 24px rgba(255,196,107,.5); }
+#screen-defeat .end-title{ color:#FF8A76; }
+.end-sub{ color:var(--dim); font-size:14px; }
+.reward-row{ display:flex; gap:12px; width:100%; }
+.reward{ flex:1; background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:16px;
+  padding:14px 8px; text-align:center; }
+.reward .rv{ font-size:24px; font-weight:900; }
+.reward .rl{ font-size:12px; color:var(--dim); margin-top:2px; }
+.reward.xp .rv{ color:var(--xp); } .reward.coin .rv{ color:var(--coin); } .reward.acc .rv{ color:var(--accent2); }
+.stat-line{ font-size:14px; color:var(--txt); background:rgba(255,255,255,.04); border:1px solid var(--line);
+  border-radius:12px; padding:9px 14px; width:100%; display:flex; justify-content:space-between; }
+.stat-line b{ color:var(--accent2); }
+
+.pause-card{ width:min(360px,90vw); background:var(--panel2); border:1px solid var(--line); border-radius:24px;
+  padding:26px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:12px; }
+.pause-card h2{ text-align:center; margin-bottom:6px; }
+
+#offline-badge{ position:fixed; z-index:50; top:calc(6px + env(safe-area-inset-top)); left:50%;
+  transform:translateX(-50%); font-size:11px; color:#FFD9AE; background:rgba(232,68,46,.25);
+  border:1px solid rgba(232,68,46,.5); padding:4px 12px; border-radius:99px; display:none; }
+#offline-badge.show{ display:block; }
+
+.katex{ font-size:1.02em; }
+.install-row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+
+/* ---------- দোকান ---------- */
+#screen-shop{ justify-content:flex-start; gap:12px; padding:calc(16px + env(safe-area-inset-top)) 16px 24px; overflow-y:auto; }
+.shop-wrap{ width:min(880px,96vw); display:flex; flex-direction:column; gap:12px; }
+.shop-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.shop-head h2{ font-size:clamp(20px,4vw,26px); }
+#shop-wallet{ display:flex; gap:7px; flex-wrap:wrap; }
+.wal{ display:flex; align-items:center; gap:5px; background:var(--panel); border:1px solid var(--line);
+  border-radius:12px; padding:6px 11px; font-size:13.5px; font-weight:700; box-shadow:var(--shadow); }
+.wal.hi{ border-color:var(--accent); color:var(--accent2); }
+#shop-tabs{ display:flex; gap:8px; overflow-x:auto; padding:2px 2px 6px; }
+.shop-tab{ white-space:nowrap; padding:10px 15px; border-radius:13px; background:rgba(255,255,255,.05);
+  border:1px solid var(--line); color:var(--txt); font-size:14px; font-weight:700; transition:transform .1s; }
+.shop-tab:active{ transform:scale(.95); }
+.shop-tab.active{ background:linear-gradient(180deg,var(--accent2),var(--accent)); color:#1A0E05; border-color:transparent; }
+#shop-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(238px,1fr)); gap:10px; }
+.shop-item{ background:var(--panel2); border:1px solid var(--line); border-radius:18px; padding:14px;
+  display:flex; flex-direction:column; gap:9px; text-align:left; backdrop-filter:blur(10px); }
+.shop-item.owned{ border-color:rgba(76,217,123,.4); }
+.shop-item.equipped{ border-color:var(--green); box-shadow:0 0 0 1px var(--green), 0 0 20px rgba(76,217,123,.22); }
+.si-top{ display:flex; align-items:center; gap:10px; }
+.si-ico{ font-size:27px; line-height:1; filter:drop-shadow(0 3px 8px rgba(0,0,0,.45)); }
+.si-name{ font-weight:800; font-size:15px; }
+.si-sub{ font-size:11.5px; color:var(--dim); margin-top:1px; }
+.si-desc{ font-size:12.8px; line-height:1.5; color:rgba(232,245,239,.88); min-height:38px; }
+.si-price{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:auto; }
+.price-tag{ font-weight:800; font-size:14px; color:var(--coin); }
+.price-tag.ok{ color:var(--green); }
+.shop-empty{ color:var(--dim); font-size:14px; padding:18px 4px; }
+
+/* ---------- জগৎ বাছাই ---------- */
+#screen-worlds{ justify-content:flex-start; gap:12px; padding:calc(16px + env(safe-area-inset-top)) 16px 24px; overflow-y:auto; }
+.worlds-wrap{ width:min(880px,96vw); display:flex; flex-direction:column; gap:12px; }
+#worlds-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(238px,1fr)); gap:10px; }
+.world-card{ background:var(--panel2); border:1px solid var(--line); border-radius:18px; padding:14px;
+  display:flex; flex-direction:column; gap:9px; text-align:left; backdrop-filter:blur(10px); }
+.world-card.cur{ border-color:var(--green); box-shadow:0 0 0 1px var(--green), 0 0 20px rgba(76,217,123,.22); }
+.world-card.off{ opacity:.62; }
+.wc-top{ display:flex; align-items:center; gap:10px; }
+.wc-ico{ font-size:27px; line-height:1; filter:drop-shadow(0 3px 8px rgba(0,0,0,.45)); }
+.wc-name{ font-weight:800; font-size:15px; }
+.wc-sub{ font-size:11.5px; color:var(--dim); margin-top:1px; }
+.wc-meta{ font-size:12.8px; line-height:1.5; color:rgba(232,245,239,.88); min-height:20px; }
+.wc-meta b{ color:var(--accent2); }
+.wc-badge{ font-size:11px; font-weight:800; color:#FFD9AE; background:rgba(232,178,46,.16);
+  border:1px solid rgba(232,178,46,.45); border-radius:99px; padding:2px 9px; margin-left:6px; white-space:nowrap; }
+
+/* ---------- বড় ম্যাচ (BR) ---------- */
+#match-hud{ position:fixed; inset:0; z-index:23; pointer-events:none; }
+#mh-top{ position:absolute; top:calc(8px + env(safe-area-inset-top)); left:10px; right:10px;
+  display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+.mh-chips{ display:flex; gap:8px; align-items:center; pointer-events:auto; }
+.mh-chip{ background:var(--panel); border:1px solid var(--line); border-radius:13px;
+  padding:9px 12px; font-size:13px; font-weight:700; color:var(--txt);
+  box-shadow:var(--shadow); backdrop-filter:blur(10px); }
+.mh-chip.danger{ color:#FFB4A6; border-color:rgba(232,68,46,.55); background:rgba(232,68,46,.2); }
+#mh-inv{ position:absolute; left:12px; bottom:calc(58px + env(safe-area-inset-bottom));
+  display:flex; gap:8px; flex-wrap:wrap; max-width:62vw; pointer-events:auto; }
+#mh-inv .chip{ background:var(--panel); border:1px solid var(--line); border-radius:12px;
+  padding:8px 11px; font-size:12.5px; font-weight:700; color:var(--txt); box-shadow:var(--shadow); }
+#mh-inv .chip.use{ color:var(--green); border-color:rgba(76,217,123,.5); animation:use-pulse 1.2s infinite; }
+@keyframes use-pulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(76,217,123,.45); } 50%{ box-shadow:0 0 14px 2px rgba(76,217,123,.35); } }
+#kill-feed{ position:fixed; right:10px; top:calc(148px + env(safe-area-inset-top)); z-index:23;
+  display:flex; flex-direction:column; gap:6px; align-items:flex-end; pointer-events:none; max-width:72vw; }
+.feed-item{ background:rgba(8,14,12,.82); border:1px solid var(--line); border-radius:12px;
+  padding:7px 12px; font-size:12.5px; font-weight:600; color:var(--txt);
+  text-shadow:0 1px 2px #000; transition:opacity .9s; }
+.feed-item.fade{ opacity:0; }
+#mh-prompt{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(140px + env(safe-area-inset-bottom));
+  z-index:25; pointer-events:auto; white-space:nowrap; }
+#drop-btn{ position:fixed; left:50%; bottom:calc(58px + env(safe-area-inset-bottom)); z-index:25;
+  pointer-events:auto; animation:drop-pulse 1.1s infinite; }
+@keyframes drop-pulse{ 0%,100%{ transform:translateX(-50%) scale(1); } 50%{ transform:translateX(-50%) scale(1.05); } }
+#q-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+#q-head-txt{ font-size:13px; font-weight:800; color:var(--accent2); letter-spacing:.3px; }
+#q-close{ background:rgba(232,68,46,.14); border:1px solid rgba(232,68,46,.45); color:#FFB4A6;
+  border-radius:10px; padding:7px 12px; font-size:12.5px; font-weight:700; }
+#q-close:active{ transform:scale(.94); }
+
+/* অ্যাকশন বাটন — ফায়ার / প্রাচীর / বোমা */
+#mh-actions{ position:absolute; right:14px; bottom:calc(34px + env(safe-area-inset-bottom));
+  display:flex; align-items:flex-end; gap:12px; pointer-events:auto; }
+.act-btn{ width:58px; height:58px; border-radius:50%; border:1px solid var(--line);
+  background:var(--panel); color:var(--txt); font-size:24px; line-height:1;
+  box-shadow:var(--shadow); backdrop-filter:blur(10px); position:relative;
+  display:flex; align-items:center; justify-content:center;
+  touch-action:none; user-select:none; -webkit-user-select:none; }
+.act-btn:active{ transform:scale(.9); }
+.act-btn.empty{ opacity:.38; filter:grayscale(1); }
+.act-btn .badge{ position:absolute; top:-6px; right:-6px; min-width:21px; height:21px;
+  border-radius:99px; background:#E8442E; color:#fff; font-size:11.5px; font-weight:800;
+  display:flex; align-items:center; justify-content:center; padding:0 5px;
+  border:1.5px solid rgba(0,0,0,.35); }
+.act-btn.active{ border-color:rgba(95,199,255,.85); color:#CFEAFF;
+  background:rgba(46,120,180,.45); box-shadow:0 0 16px rgba(95,199,255,.4); }
+#mh-crouch{ position:absolute; right:0; bottom:calc(100% + 14px); width:52px; height:52px; font-size:22px; }
+#mh-fire{ width:86px; height:86px; font-size:40px; border-width:2px;
+  border-color:rgba(255,216,150,.65);
+  background:radial-gradient(circle at 34% 30%, #ffd08a, #ff7a2e 52%, #c9411a);
+  box-shadow:0 6px 22px rgba(255,122,46,.45), inset 0 -6px 14px rgba(120,20,0,.4);
+  transition:transform .08s; }
+#mh-fire.down{ transform:scale(.9); box-shadow:0 0 26px 6px rgba(255,150,60,.75); }
+
+/* ---------- মিনিম্যাপ (রাডার) ---------- */
+#mh-map{ position:fixed; left:12px; top:calc(80px + env(safe-area-inset-top));
+  width:116px; height:116px; border-radius:50%; z-index:24; pointer-events:none;
+  background:rgba(8,14,12,.55); border:2px solid rgba(255,255,255,.22);
+  box-shadow:var(--shadow); }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="vignette"></div>
+<div id="damage-flash"></div>
+<div id="heal-flash"></div>
+<div id="offline-badge">📴 অফলাইন মোড — পুরনো ডাটা দেখানো হচ্ছে</div>
+
+<!-- ======= LOADING ======= -->
+<div id="screen-loading" class="screen solid">
+  <img class="g-logo" src="./icon.svg" alt="" onerror="this.src='./icon-192.png'">
+  <div class="g-title" style="font-size:clamp(28px,6vw,44px)">স্মৃতির জঙ্গল</div>
+  <div class="g-sub">পরীক্ষার খাতা 3D অ্যাডভেঞ্চার</div>
+  <div class="ld-bar"><i id="ld-fill"></i></div>
+  <div id="ld-msg">গেম লোড হচ্ছে…</div>
+</div>
+
+<!-- ======= TITLE ======= -->
+<div id="screen-title" class="screen scrim hidden">
+  <img class="g-logo" src="./icon.svg" alt="" onerror="this.src='./icon-192.png'">
+  <div>
+    <div class="g-title">স্মৃতির জঙ্গল</div>
+    <div class="g-sub">ভবিষ্যৎ থেকে আসা অ্যাস্ট্রোনট — যাকে বাঁচাতে এসেছ, সে-ই তোমার অতীত</div>
+  </div>
+  <div class="player-chip hidden" id="title-player">
+    <img src="./icon-192.png" alt="">
+    <div class="pc-mid">
+      <div class="pc-name" id="tp-name">—</div>
+      <div class="pc-lv" id="tp-lv">লেভেল ১</div>
+    </div>
+    <div class="chip-xp">
+      <div style="font-size:10px;color:var(--dim);text-align:right"><span id="tp-xp-txt">0/100 XP</span></div>
+      <div class="xpbar"><i id="tp-xp-fill" style="width:0%"></i></div>
+    </div>
+  </div>
+  <button class="btn" id="btn-match" style="min-width:min(300px,80vw)">🪂 &nbsp;বড় ম্যাচ (ব্যাটল রয়্যাল)</button>
+  <button class="btn ghost" id="btn-play" style="min-width:min(300px,80vw)">🌴 &nbsp;জগৎ-যুদ্ধ (গল্প)</button>
+  <div class="install-row">
+    <button class="btn ghost small hidden" id="btn-shop">🛍️ &nbsp;দোকান ও জিনিসপত্র</button>
+    <button class="btn ghost small hidden" id="btn-install">📲 হোম স্ক্রিনে ইনস্টল</button>
+    <button class="btn ghost small hidden" id="btn-logout">লগআউট</button>
+  </div>
+  <div class="g-brand">🛡️ পরীক্ষার খাতা টিউশন অ্যাকাউন্টে সংযুক্ত</div>
+</div>
+
+<!-- ======= দোকান ======= -->
+<div id="screen-shop" class="screen solid hidden">
+  <div class="shop-wrap">
+    <div class="shop-head">
+      <h2>🛍️ দোকান</h2>
+      <button class="icon-btn" id="btn-shop-close" title="ফিরে যাও">✕</button>
+    </div>
+    <div class="g-sub" style="text-align:left">প্রতিটা বিষয় পড়ে যে মুদ্রা রোজগার করবে, সেই মুদ্রাতেই ওই বিষয়ের জিনিস কিনতে পারবে।</div>
+    <div id="shop-wallet"></div>
+    <div id="shop-tabs"></div>
+    <div id="shop-grid"></div>
+  </div>
+</div>
+
+<!-- ======= জগৎ বাছাই ======= -->
+<div id="screen-worlds" class="screen solid hidden">
+  <div class="worlds-wrap">
+    <div class="shop-head">
+      <h2>🗺️ জগৎ বাছাই</h2>
+      <button class="icon-btn" id="btn-worlds-close" title="ফিরে যাও">✕</button>
+    </div>
+    <div class="g-sub" style="text-align:left">প্রতিটা বিষয়ের আলাদা জগৎ আর আলাদা মুদ্রা — যে বিষয়ে পড়তে চাও, সেই জগতে যাও।</div>
+    <div id="worlds-grid"></div>
+  </div>
+</div>
+
+<!-- ======= LOGIN ======= -->
+<div id="screen-login" class="screen scrim hidden">
+  <div class="login-card">
+    <h2>টিউশন অ্যাকাউন্টে প্রবেশ</h2>
+    <div class="hint">গেমের অগ্রগতি তোমার পরীক্ষার খাতা অ্যাকাউন্টেই সেভ হবে</div>
+    <input class="inp" id="li-name" type="text" placeholder="তোমার নাম (যেমন: রাহাত)" autocomplete="name">
+    <input class="inp" id="li-pass" type="password" placeholder="পাসওয়ার্ড">
+    <div class="err" id="li-err"></div>
+    <button class="btn" id="btn-login">অ্যাকাউন্টে প্রবেশ করো</button>
+    <button class="back-link" id="btn-login-back">← ফিরে যাও</button>
+  </div>
+</div>
+
+<!-- ======= WORLD HUD ======= -->
+<div id="hud" class="hidden">
+  <div class="hud-top">
+    <div id="hud-left" class="hud-panel">
+      <div id="hud-name-row"><b id="hud-name">—</b><span id="hud-lv">LV 1</span></div>
+      <div class="bar hp"><i id="hud-hp-fill" style="width:100%"></i><span class="bar-txt" id="hud-hp-txt">100/100</span></div>
+      <div class="bar xp"><i id="hud-xp-fill" style="width:0%"></i></div>
+    </div>
+    <div id="hud-objective">🎯 …</div>
+    <div id="hud-right">
+      <div id="hud-coins">🪙 0</div>
+      <button class="icon-btn hidden" id="btn-hud-review" title="পুরোনো ভুলের রিভিউ">🪽<span class="badge" id="review-n">০</span></button>
+      <button class="icon-btn" id="btn-hud-match" title="বড় ম্যাচ">🪂</button>
+      <button class="icon-btn" id="btn-pause">⏸</button>
+    </div>
+  </div>
+  <div id="hud-hint">🕹️ WASD/তীর চাবি বা স্ক্রিনের বাম পাশে টেনে চলো • ডান পাশে টেনে ক্যামেরা ঘোরাও</div>
+</div>
+<div id="joystick"><div id="joystick-knob"></div></div>
+
+<!-- ======= বড় ম্যাচ HUD ======= -->
+<div id="match-hud" class="hidden">
+  <div id="mh-top">
+    <div id="mh-left" class="hud-panel">
+      <div id="hud-name-row"><b>তুমি</b><span>৯ জনে টিকে থাকো</span></div>
+      <div class="bar hp"><i id="mh-hp-fill" style="width:100%"></i><span class="bar-txt" id="mh-hp-num">১০০/১০০</span></div>
+    </div>
+    <div class="mh-chips">
+      <div class="mh-chip" id="mh-alive">👥 ৯</div>
+      <div class="mh-chip" id="mh-kills">💀 ০</div>
+      <div class="mh-chip" id="mh-zone">🔵 বলয়</div>
+      <button class="icon-btn" id="mh-pause">⏸</button>
+    </div>
+  </div>
+  <div id="mh-inv"></div>
+  <div id="mh-actions">
+    <button class="act-btn" id="mh-crouch" title="নিচু হয়ে চলো">🧎</button>
+    <button class="act-btn" id="mh-wall" title="গ্লু-প্রাচীর">🧱<span class="badge" id="mh-wall-n">০</span></button>
+    <button class="act-btn" id="mh-bomb" title="বোমা">💣<span class="badge" id="mh-bomb-n">০</span></button>
+    <button class="act-btn fire" id="mh-fire" title="গুলি ছোড়ো">🔥</button>
+  </div>
+</div>
+<button class="btn small hidden" id="mh-prompt"></button>
+<div id="kill-feed" class="hidden"></div>
+<canvas id="mh-map" class="hidden" width="232" height="232"></canvas>
+<button class="btn hidden" id="drop-btn">🪂 &nbsp;লাফ দাও!</button>
+
+<!-- ======= BATTLE HUD ======= -->
+<div id="battle-hud" class="hidden">
+  <div class="bh-top">
+    <div class="bh-box">
+      <div class="bh-label"><b id="bh-player-name">তুমি</b><span id="bh-hp-num">100/100</span></div>
+      <div class="bar hp"><i id="battle-hp-fill" style="width:100%"></i></div>
+      <div id="battle-combo"></div>
+    </div>
+    <div class="bh-box" style="text-align:right">
+      <div class="bh-label"><b id="battle-monster-name">দানব</b><span id="battle-mhp-num"></span></div>
+      <div class="bar mhp"><i id="battle-mhp-fill" style="width:100%"></i></div>
+    </div>
+  </div>
+  <div id="battle-timer">
+    <svg viewBox="0 0 64 64"><circle class="tr-bg" cx="32" cy="32" r="27"></circle><circle class="tr-fg" id="tr-fg" cx="32" cy="32" r="27" stroke-dasharray="169.6" stroke-dashoffset="0"></circle></svg>
+    <span class="tr-num" id="battle-timer-num">45</span>
+  </div>
+</div>
+
+<!-- ======= QUESTION PANEL ======= -->
+<div id="q-panel" class="hidden">
+  <div id="q-head" class="hidden">
+    <span id="q-head-txt">…</span>
+    <button id="q-close">✕ বন্ধ করো</button>
+  </div>
+  <div id="q-text">…</div>
+  <div id="q-angel" class="hidden"></div>
+  <div id="q-opts"></div>
+</div>
+
+<!-- ======= PAUSE ======= -->
+<div id="screen-pause" class="screen scrim hidden">
+  <div class="pause-card">
+    <h2>⏸ বিরতি</h2>
+    <button class="btn" id="btn-resume">চালিয়ে যাও</button>
+    <button class="btn ghost" id="btn-sound">🔊 সাউন্ড: চালু</button>
+    <button class="btn danger" id="btn-quit">মিশন ছেড়ে বের হও</button>
+  </div>
+</div>
+
+<!-- ======= VICTORY ======= -->
+<div id="screen-victory" class="screen scrim hidden">
+  <div class="end-card">
+    <div class="end-emoji">🏆</div>
+    <div class="end-title" id="v-title">দানব পরাজিত!</div>
+    <div class="end-sub" id="v-sub">অসাধারণ লড়াই! তোমার পুরস্কার:</div>
+    <div class="reward-row">
+      <div class="reward xp"><div class="rv" id="v-xp">+0</div><div class="rl">XP</div></div>
+      <div class="reward coin"><div class="rv" id="v-coins">+0</div><div class="rl">কয়েন</div></div>
+      <div class="reward acc"><div class="rv" id="v-acc">0%</div><div class="rl">নির্ভুলতা</div></div>
+    </div>
+    <div class="stat-line"><span>মোট XP</span><b id="v-total-xp">0</b></div>
+    <div class="stat-line"><span>বর্তমান লেভেল</span><b id="v-level">1</b></div>
+    <button class="btn" id="btn-v-continue" style="width:100%">ওয়ার্ল্ডে ফিরে যাও</button>
+  </div>
+</div>
+
+<!-- ======= DEFEAT ======= -->
+<div id="screen-defeat" class="screen scrim hidden">
+  <div class="end-card">
+    <div class="end-emoji">💫</div>
+    <div class="end-title">অ্যাস্ট্রোনট মুর্ছা গেছেন…</div>
+    <div class="end-sub" id="d-sub">হেরে যাওয়া মানে শেষ নয় — দানবের HP কমেই আছে, আর তোমার শিশুটি অপেক্ষা করছে।</div>
+    <div class="stat-line"><span id="d-stat-label">এই যুদ্ধে উত্তর ঠিক</span><b id="d-stat">0/0</b></div>
+    <button class="btn" id="btn-d-retry">⚔️ আবার লড়ো</button>
+    <button class="btn ghost" id="btn-d-leave">ওয়ার্ল্ডে ফিরে যাও</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="subtitle"></div>
+<div id="fade-black"></div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+<script type="module" src="./game.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW register failed', err));
+  });
+}
+</script>
+</body>
+</html>

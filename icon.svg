@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0B1D2C"/>
+      <stop offset="0.55" stop-color="#143243"/>
+      <stop offset="1" stop-color="#3A1E14"/>
+    </linearGradient>
+    <linearGradient id="lava" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFB347"/>
+      <stop offset="1" stop-color="#E8442E"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.75" r="0.6">
+      <stop offset="0" stop-color="#FF9A3C" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#FF9A3C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#sky)"/>
+  <ellipse cx="256" cy="420" rx="240" ry="150" fill="url(#glow)"/>
+  <path d="M0 512 L0 330 L90 240 L160 320 L256 180 L352 320 L430 250 L512 340 L512 512 Z" fill="#1B2B33"/>
+  <path d="M196 300 L256 180 L316 300 L290 292 L256 236 L222 292 Z" fill="url(#lava)" opacity="0.9"/>
+  <path d="M40 512 L0 512 L0 420 L70 380 L150 430 L230 400 L300 440 L390 405 L470 445 L512 415 L512 512 Z" fill="#101C22"/>
+  <circle cx="256" cy="118" r="30" fill="#E8F4F8" opacity="0.9"/>
+  <circle cx="248" cy="110" r="26" fill="#0B1D2C" opacity="0.25"/>
+</svg>
