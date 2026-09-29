@@ -54,6 +54,7 @@ const LOOT_KINDS = {
   heal:       { icon:'🩹', label:'হিল-কিট',         need:1, tier:0, color:0x4CD97B },
   bomb:       { icon:'💣', label:'বোমা',            need:2, tier:0, color:0xFF6A55 },
   wall:       { icon:'🧱', label:'গ্লু-প্রাচীর',     need:1, tier:0, color:0x9FD8FF },
+  airdrop:    { icon:'🪂', label:'লুটের বাক্স',     need:4, tier:9, color:0xFF5A45 },
 };
 const LOOT_DISTRIB = [['bag',3],['gun_basic',5],['gun_good',4],['gun_sniper',2],
   ['armor',3],['heal',3],['bomb',4],['wall',3]];
@@ -112,6 +113,13 @@ const PING_MAX = 14;
 const PLANE_FROM = new THREE.Vector3(-138, 66, -60);
 const PLANE_TO   = new THREE.Vector3(138, 66, 60);
 const PLANE_DUR  = 15;
+
+// ---------- airdrop (লুটের বিমান) ----------
+const AIR_FIRST = [22, 34];      // ম্যাচ শুরু থেকে প্রথম বিমান কত সেকেন্ডে
+const AIR_NEXT  = [58, 80];      // বাক্স না খুললে পরের বিমান কত পরে
+const AIR_FALL_SPEED = 9.2;      // বাক্স নামার গতি (প্যারাশুটে ধীরে)
+const AIR_BOT_RANGE = 2.6;       // বট এত কাছে থাকলে খুলতে শুরু করে
+const AIR_BOT_TAKE  = 7;         // এত সেকেন্ড পাশে থাকলে বাক্স বটের দখলে
 
 // ============================== HELPERS ==============================
 const P_pos = () => ctx.P.grp.position;
@@ -644,6 +652,7 @@ export async function startMatch(){
     prompt:null, panel:null, outside:false, snap:{},
     crouch:false, crouchK:0, crouchTip:false,
     pings:[], mapT:0,
+    airs:[], airLeft:2, airT: rand(AIR_FIRST[0], AIR_FIRST[1]),
   };
 
   // hide story objects for the match (restore on exit)
@@ -711,6 +720,7 @@ export function exitMatch(){
   for(const s of M.shots) scene.remove(s.grp);
   for(const w of M.walls){ scene.remove(w.mesh); w.mat.dispose(); }
   if(M.zone) scene.remove(M.zone.wall);
+  for(const a of (M.airs || [])){ if(a.plane) scene.remove(a.plane); if(a.grp) scene.remove(a.grp); }
   for(const s2 of M.structs) if(s2.grp) scene.remove(s2.grp);
 
   g.monsters.forEach((m, i) => {
@@ -958,6 +968,25 @@ function healCap(){ return M.inv.bag ? 3 : 1; }
 
 function grantLoot(spot){
   const kind = LOOT_KINDS[spot.kind];
+  if(spot.kind === 'airdrop'){
+    // বিমানের বাক্স — একসাথেই সেরা লুট
+    spot.alive = false;
+    ctx.scene().remove(spot.grp);
+    if(spot.air) spot.air.done = true;
+    const inv = M.inv;
+    inv.gun = Math.max(inv.gun, 3);
+    inv.armor = true;
+    inv.heals = Math.min(inv.heals + 2, healCap());
+    inv.bombs = Math.min(inv.bombs + 2, slotCap());
+    inv.walls = Math.min(inv.walls + 2, slotCap());
+    ctx.AU.sfx('coin');
+    ctx.floater(v3(spot.x, spot.y + 1.8, spot.z), '🪂 সেরা লুট!', '#FFC46B');
+    ctx.toast('🪂 বাক্স খুলল — স্নাইপার-বর্ম-হিল-কিট সব পেলে!', 2800);
+    updateInvHud();
+    ctx.updatePlayerGun();
+    closePanel();
+    return;
+  }
   spot.alive = false;
   ctx.scene().remove(spot.grp);
   const inv = M.inv;
@@ -978,6 +1007,7 @@ function grantLoot(spot){
 
 // ============================== PROMPT ==============================
 function canPick(spot){
+  if(spot.kind === 'airdrop') return null; // লুটের বাক্স সবসময় খোলা যায়
   const inv = M.inv;
   if(spot.kind === 'bag')   return inv.bag   ? 'ব্যাগ তো আছেই!' : null;
   if(spot.kind === 'armor') return inv.armor ? 'আর্মার তো পরাই আছে!' : null;
@@ -1004,9 +1034,14 @@ function promptTick(){
   const el = ctx.el.mhPrompt;
   const k = LOOT_KINDS[next.spot.kind];
   const deny = canPick(next.spot);
-  el.textContent = deny ? '✕ ' + k.label + ' (' + deny + ')'
-    : k.icon + ' ' + k.label + ' তুলো (' + bn(k.need) + 'টি প্রশ্ন)';
-  el.classList.toggle('ghost', !!deny);
+  if(next.spot.kind === 'airdrop'){
+    el.textContent = '🪂 ' + k.label + ' খোলো — ' + bn(k.need) + 'টি কঠিন প্রশ্ন';
+    el.classList.remove('ghost');
+  } else {
+    el.textContent = deny ? '✕ ' + k.label + ' (' + deny + ')'
+      : k.icon + ' ' + k.label + ' তুলো (' + bn(k.need) + 'টি প্রশ্ন)';
+    el.classList.toggle('ghost', !!deny);
+  }
   ctx.show(el);
 }
 
@@ -1501,11 +1536,16 @@ function drawMinimap(cv){
   c.fillStyle = 'rgba(200,214,205,.38)';
   for(const s2 of M.structs) c.fillRect(X(s2.x) - 3, Z(s2.z) - 3, 6, 6);
 
-  // মাটিতে পড়ে থাকা লুট — সোনালি বিন্দু
-  c.fillStyle = 'rgba(255,201,77,.65)';
+  // মাটিতে পড়ে থাকা লুট — সোনালি বিন্দু (লুটের বাক্স বড় লাল বিন্দু)
   for(const l of M.loot){
     if(!l.alive) continue;
-    c.beginPath(); c.arc(X(l.x), Z(l.z), 2.4, 0, Math.PI * 2); c.fill();
+    if(l.air){
+      c.fillStyle = 'rgba(255,86,64,.95)';
+      c.beginPath(); c.arc(X(l.x), Z(l.z), 3.8, 0, Math.PI * 2); c.fill();
+    } else {
+      c.fillStyle = 'rgba(255,201,77,.65)';
+      c.beginPath(); c.arc(X(l.x), Z(l.z), 2.4, 0, Math.PI * 2); c.fill();
+    }
   }
 
   // বলয় — এখনকার নীল; ছোট হওয়ার সময় গন্তব্যও ফিকে সাদা
@@ -1519,6 +1559,31 @@ function drawMinimap(cv){
     }
     c.strokeStyle = 'rgba(95,199,255,.95)'; c.lineWidth = 2.6;
     c.beginPath(); c.arc(X(z.cx), Z(z.cz), Math.max(2, z.r * k), 0, Math.PI * 2); c.stroke();
+  }
+
+  // লুটের বিমান ও তার বাক্স — লাল, জ্বলছে-নিভছে
+  for(const a of (M.airs || [])){
+    if(a.done) continue;
+    const bl = 0.55 + 0.45 * Math.sin(ctx.G.time * 6);
+    if(a.plane){
+      c.save();
+      c.translate(X(a.plane.position.x), Z(a.plane.position.z));
+      c.rotate(Math.PI - Math.atan2(a.to.x - a.from.x, a.to.z - a.from.z));
+      c.fillStyle = 'rgba(255,86,64,.9)';
+      c.beginPath(); c.moveTo(0, -8); c.lineTo(6, 6); c.lineTo(0, 3); c.lineTo(-6, 6);
+      c.closePath(); c.fill();
+      c.restore();
+    }
+    if(a.state !== 'fly'){
+      c.strokeStyle = 'rgba(255,86,64,' + (0.35 + 0.5 * bl).toFixed(2) + ')';
+      c.lineWidth = 1.6;
+      c.beginPath(); c.arc(X(a.x), Z(a.z), 7 + 4 * bl, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = 'rgba(255,86,64,' + (0.6 + 0.4 * bl).toFixed(2) + ')';
+      c.beginPath();
+      c.moveTo(X(a.x), Z(a.z) - 5.5); c.lineTo(X(a.x) + 5.5, Z(a.z));
+      c.lineTo(X(a.x), Z(a.z) + 5.5); c.lineTo(X(a.x) - 5.5, Z(a.z));
+      c.closePath(); c.fill();
+    }
   }
 
   // গুলির আওয়াজ — লাল বিন্দু, ধীরে মিলিয়ে যায়
@@ -1623,11 +1688,186 @@ function zoneTick(dt){
 function lootTick(dt){
   for(const s of M.loot){
     if(!s.alive) continue;
+    if(s.air) continue; // বাক্সের ধোঁয়া-আলো airdropTick নিজেই চালায়
     s.item.rotation.y += dt * 1.4;
     s.item.position.y = Math.sin(ctx.G.time * 1.8 + s.i) * 0.09;
     s.beam.material.opacity = 0.22 + Math.sin(ctx.G.time * 2.4 + s.i) * 0.07;
     const sc = 1 + Math.sin(ctx.G.time * 2.2 + s.i) * 0.06;
     s.ring.scale.set(sc, sc, 1);
+  }
+}
+
+// ============================== AIRDROP (লুটের বিমান) ==============================
+let puffGeo = null, airId = 0;
+
+function buildCargoPlane(){
+  const grp = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x77805E, roughness: 0.6, metalness: 0.12 });
+  const accMat  = new THREE.MeshStandardMaterial({ color: 0x3A4030, roughness: 0.8 });
+  const fus = new THREE.Mesh(new THREE.CapsuleGeometry(1.0, 5.6, 6, 12), bodyMat);
+  fus.rotation.z = Math.PI / 2; grp.add(fus);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.22, 10.5), bodyMat);
+  wing.position.y = 0.35; grp.add(wing);
+  const tailW = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.18, 4.2), bodyMat);
+  tailW.position.set(-3.3, 0.28, 0); grp.add(tailW);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.5, 1.3), accMat);
+  fin.position.set(-3.4, 0.95, 0); grp.add(fin);
+  const light = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xFF5A45 }));
+  light.position.set(1.9, -0.75, 0); grp.add(light);
+  ctx.scene().add(grp);
+  return grp;
+}
+
+function spawnAirdrop(){
+  const z = M.zone;
+  let x = z.cx, zz = z.cz;
+  for(let tries = 0; tries < 60; tries++){
+    const ang = Math.random() * Math.PI * 2, r = Math.random() * z.r * 0.62;
+    x = z.cx + Math.cos(ang) * r; zz = z.cz + Math.sin(ang) * r;
+    if(Math.hypot(x, zz) > MAP_LIMIT - 10) continue;
+    if(ctx.isWater(x, zz, 0.9)) continue;
+    if(M.structs.some(s2 => Math.hypot(s2.x - x, s2.z - zz) < 6)) continue;
+    break;
+  }
+  const az = Math.random() * Math.PI * 2;
+  const ux = Math.cos(az), uz = Math.sin(az);
+  const from = v3(x - ux * 175, 58, zz - uz * 175);
+  const to   = v3(x + ux * 175, 58, zz + uz * 175);
+  const plane = buildCargoPlane();
+  plane.position.copy(from);
+  plane.rotation.y = Math.atan2(-uz, ux);
+  M.airs.push({ id: ++airId, state:'fly', plane, from, to, dur: 14, t: 0,
+    x, z: zz, grp:null, chute:null, crate:null, smoke:[], beam:null, ring:null,
+    spot:null, botT:0, done:false });
+  M.airLeft--;
+  M.airT = M.airLeft > 0 ? rand(AIR_NEXT[0], AIR_NEXT[1]) : 0;
+  addFeed('🛩️ লুটের বিমান এল!');
+  ctx.subtitle('🎙️ "লুটের বিমান আসছে — মিনিম্যাপের লাল চিহ্ন দেখে দৌড়াও!"', 3400);
+  ctx.AU.sfx('gate');
+}
+
+function dropCrate(a){
+  a.state = 'fall';
+  const grp = new THREE.Group();
+  grp.position.set(a.x, 60, a.z);
+  const boxMat = new THREE.MeshStandardMaterial({ color: 0xA8452F, roughness: 0.7 });
+  const strapMat = new THREE.MeshStandardMaterial({ color: 0x2C2F33, roughness: 0.8 });
+  const crate = new THREE.Mesh(new THREE.BoxGeometry(1.45, 1.05, 1.45), boxMat);
+  crate.castShadow = true; grp.add(crate);
+  const strapA = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.12, 0.26), strapMat);
+  grp.add(strapA);
+  const strapB = new THREE.Mesh(new THREE.BoxGeometry(0.26, 1.12, 1.5), strapMat);
+  grp.add(strapB);
+  const chute = buildChute(0xF2604A, 1.05);
+  chute.visible = true;
+  grp.add(chute);
+  ctx.scene().add(grp);
+  a.grp = grp; a.chute = chute; a.crate = crate;
+}
+
+function landCrate(a){
+  a.state = 'landed';
+  a.chute.visible = false;
+  a.grp.rotation.z = 0; a.grp.rotation.x = 0;
+  const gy = groundY(a.x, a.z);
+  a.y = gy;
+  const col = 0xFF5A45;
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 30, 10, 1, true),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  beam.position.y = 15; a.grp.add(beam);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.4, 26),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5,
+      side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; a.grp.add(ring);
+  if(!puffGeo) puffGeo = new THREE.SphereGeometry(0.55, 7, 6);
+  for(let i = 0; i < 6; i++){
+    const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false });
+    const m = new THREE.Mesh(puffGeo, mat);
+    a.smoke.push({ m, ph: i / 6 });
+    a.grp.add(m);
+  }
+  a.beam = beam; a.ring = ring;
+  const spot = { kind:'airdrop', i: 900 + a.id, x: a.x, z: a.z, y: gy, grp: a.grp,
+    beam, ring, item: a.crate, got: 0, alive: true, air: a };
+  a.spot = spot;
+  M.loot.push(spot);
+  addFeed('🪂 লুটের বাক্স পড়েছে — লাল ধোঁয়া দেখে খুঁজে নাও!');
+  ctx.toast('🪂 লুটের বাক্স! মিনিম্যাপে লাল চিহ্ন — ৪টি কঠিন প্রশ্নের পুরস্কার সেরা লুট', 3400);
+  // কাছের বটেরা বাক্সের দিকে ছুটে আসে — দখলের লড়াই শুরু
+  for(const b of M.bots){
+    if(!b.alive || (b.state !== 'active' && b.state !== 'landed')) continue;
+    const d = Math.hypot(b.grp.position.x - a.x, b.grp.position.z - a.z);
+    if(d < 72 && Math.random() < 0.7){
+      b.roamTo = v3(a.x + rand(-5.5, 5.5), 0, a.z + rand(-5.5, 5.5));
+      b.roamT = rand(8, 13);
+    }
+  }
+}
+
+function botTakeCrate(a, b){
+  if(a.spot && a.spot.alive) a.spot.alive = false;
+  ctx.scene().remove(a.grp);
+  a.done = true;
+  b.hp = Math.min(120, b.hp + 45);
+  b.provokedT = 3;
+  const at = b.grp.position.clone(); at.y += 1.9;
+  ctx.floater(at, '+45', '#FFC46B');
+  addFeed('😈 ' + b.name + ' লুটের বাক্স নিয়ে নিল!');
+  ctx.toast('😈 ' + b.name + ' বাক্সটা লুটে নিল — পরের বিমানে আগে পৌঁছো!', 3000);
+}
+
+function airdropTick(dt){
+  if(M.airLeft > 0 && M.airT > 0){
+    M.airT -= dt;
+    if(M.airT <= 0) spawnAirdrop();
+  }
+  for(const a of M.airs){
+    if(a.done) continue;
+    if(a.plane){
+      a.t += dt;
+      const k = Math.min(1, a.t / a.dur);
+      a.plane.position.set(a.from.x + (a.to.x - a.from.x) * k,
+        58 + Math.sin(k * Math.PI) * 2,
+        a.from.z + (a.to.z - a.from.z) * k);
+      a.plane.rotation.z = Math.sin(a.t * 0.9) * 0.08;
+      if(a.state === 'fly' && k >= 0.5) dropCrate(a);
+      if(k >= 1){ ctx.scene().remove(a.plane); a.plane = null; }
+    }
+    if(a.grp && a.state === 'fall'){
+      a.grp.position.y -= AIR_FALL_SPEED * dt;
+      a.grp.rotation.z = Math.sin(ctx.G.time * 1.6) * 0.07;
+      a.grp.rotation.x = Math.cos(ctx.G.time * 1.3) * 0.05;
+      const gy = groundY(a.x, a.z);
+      if(a.grp.position.y <= gy + 0.06){ a.grp.position.y = gy; landCrate(a); }
+    } else if(a.state === 'landed'){
+      a.beam.material.opacity = 0.2 + Math.sin(ctx.G.time * 2.4) * 0.07;
+      const sc = 1 + Math.sin(ctx.G.time * 2.2) * 0.06;
+      a.ring.scale.set(sc, sc, 1);
+      for(const p of a.smoke){
+        const t = (ctx.G.time * 1.25 + p.ph * 9) % 9;
+        p.m.position.set(Math.sin(ctx.G.time * 0.7 + p.ph * 7) * t * 0.12, 0.5 + t,
+          Math.cos(ctx.G.time * 0.6 + p.ph * 5) * t * 0.12);
+        const w = 1 + t * 0.22;
+        p.m.scale.set(w, w * 1.15, w);
+        p.m.material.opacity = 0.45 * Math.max(0.05, 1 - t / 9);
+      }
+      // বট পাশে দাঁড়িয়ে থাকলে বাক্স হাতছাড়া — লড়াই না করে লুট নেওয়া যায় না
+      let near = null;
+      for(const b of M.bots){
+        if(!b.alive || (b.state !== 'active' && b.state !== 'landed')) continue;
+        const d = Math.hypot(b.grp.position.x - a.x, b.grp.position.z - a.z);
+        if(d < AIR_BOT_RANGE){ near = b; break; }
+      }
+      if(near){
+        near.roamTo = v3(a.x + rand(-2, 2), 0, a.z + rand(-2, 2));
+        near.roamT = Math.max(near.roamT, 3);
+        a.botT += dt;
+        if(a.botT >= AIR_BOT_TAKE) botTakeCrate(a, near);
+      } else a.botT = Math.max(0, a.botT - dt * 0.8);
+    }
   }
 }
 
@@ -1659,6 +1899,7 @@ export function tick(dt){
   botsDropTick(dt); // দেরিতে নামা বটেরাও নামা শেষ করছে
   zoneTick(dt); if(!M || M.phase !== 'live') return;
   botsTick(dt); if(!M || M.phase !== 'live') return;
+  airdropTick(dt);
   lodTick(dt);
   combatTick(dt);
   shotsTick(dt);

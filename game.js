@@ -1952,9 +1952,18 @@ function checkAchievements(isBoss){
     G.progress.achievements.push({ id, title, earnedAt: new Date().toISOString() });
     setTimeout(() => toast('🏅 অর্জন আনলক: ' + title, 3200), 2500);
   };
+  const won = c => c.defeated || (G.progress.chapterProgress[c.id] && G.progress.chapterProgress[c.id].defeatedAt);
+  const worldDone = w => (w.chapters || []).length > 0 && w.chapters.every(won);
   if(G.progress.completedBattles === 1) give('first_win', 'প্রথম জয়');
   if(isBoss) give('boss_slayer', 'বস স্লেয়ার');
-  if(G.world && G.world.chapters.every(c => c.defeated || (G.progress.chapterProgress[c.id] && G.progress.chapterProgress[c.id].defeatedAt))) give('valley_free', 'জঙ্গল মুক্ত');
+  if(G.world && worldDone(G.world)) give('valley_free', 'জঙ্গল মুক্ত');
+  // সব জগতের সব অধ্যায় শেষ — খেলার একেবারে শেষে তবেই গল্পের আসল মোচড়টা খোলে
+  const doneWorlds = (G.worlds || []).filter(w => (w.chapters || []).length > 0);
+  if(doneWorlds.length && doneWorlds.every(worldDone) && !earned('twist_revealed')){
+    G.progress.achievements.push({ id:'twist_revealed', title:'নিজের অতীতের দেখা', earnedAt: new Date().toISOString() });
+    setTimeout(() => toast('🏅 অর্জন আনলক: নিজের অতীতের দেখা', 3600), 5600);
+    setTimeout(() => subtitle('🎙️ "জঙ্গল এখন মুক্ত। আজ শোনো সেই সত্যটা — যে শিশুকে তুমি আগলে বড় করলে, সে আর কেউ নয়: সেই ছোট্ট তুমি। ভবিষ্যৎ থেকে ফেরা অ্যাস্ট্রোনট, তুমি আসলে তোমার নিজের অতীতকেই বাঁচাতে এসেছিলে।"', 11000), 6400);
+  }
 }
 
 async function onPlayerDefeated(){
