@@ -321,6 +321,45 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   padding:7px 12px; font-size:12.5px; font-weight:600; color:var(--txt);
   text-shadow:0 1px 2px #000; transition:opacity .9s; }
 .feed-item.fade{ opacity:0; }
+
+/* জোন-সতর্কবার্তা, কিল-স্ট্রিক, আঘাতের দিক — ফ্রি-ফায়ার-ধাঁচ */
+#mh-alert{ position:fixed; left:50%; top:calc(60px + env(safe-area-inset-top));
+  transform:translateX(-50%) translateY(-8px);
+  z-index:26; pointer-events:none; opacity:0; transition:opacity .3s, transform .3s;
+  background:rgba(150,26,12,.94); border:1px solid rgba(255,120,90,.7); border-radius:12px;
+  padding:10px 18px; font-size:14.5px; font-weight:800; color:#FFE9E2; white-space:nowrap;
+  box-shadow:0 10px 30px rgba(0,0,0,.5); text-shadow:0 1px 2px #000; }
+#mh-alert.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+#mh-alert.calm{ background:rgba(24,80,120,.92); border-color:rgba(120,200,255,.6); color:#DCF2FF; }
+#mh-alert.blink{ animation:alert-blink .85s infinite; }
+@keyframes alert-blink{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.5); } }
+#mh-streak{ position:fixed; left:50%; top:calc(112px + env(safe-area-inset-top));
+  transform:translateX(-50%) translateY(-8px) scale(.92);
+  z-index:26; pointer-events:none; opacity:0; transition:opacity .25s, transform .25s;
+  background:linear-gradient(135deg, rgba(255,176,54,.95), rgba(232,110,20,.95));
+  border:1px solid rgba(255,224,150,.85); border-radius:14px;
+  padding:10px 20px; font-size:16px; font-weight:900; color:#3A1A00; white-space:nowrap;
+  box-shadow:0 10px 30px rgba(0,0,0,.45); }
+#mh-streak.show{ opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
+
+/* আঘাতের দিক-নির্দেশক — কোন দিক থেকে গুলি এল */
+#hit-dir{ position:fixed; left:50%; top:42%; width:0; height:0; z-index:26;
+  pointer-events:none; opacity:0; transition:opacity .3s; }
+#hit-dir.show{ opacity:1; }
+#hit-dir .hd-ring{ position:absolute; left:-74px; top:-74px; width:148px; height:148px; border-radius:50%;
+  background:radial-gradient(circle, rgba(232,68,46,.30) 0%, rgba(232,68,46,.11) 55%, rgba(232,68,46,0) 72%); }
+#hit-dir .hd-arrow{ position:absolute; left:0; top:0; width:0; height:0; transform-origin:0 0; }
+#hit-dir .hd-arrow i{ position:absolute; left:-15px; top:-126px; width:0; height:0;
+  border-left:15px solid transparent; border-right:15px solid transparent;
+  border-bottom:26px solid #FF5A45; filter:drop-shadow(0 0 10px rgba(255,90,69,.9)); }
+#hit-dir .hd-dist{ position:absolute; left:-44px; top:84px; width:88px; text-align:center;
+  font-size:12.5px; font-weight:800; color:#FFB9AC; text-shadow:0 1px 3px #000; }
+
+/* কম HP — লাল কিনারা ও স্পন্দন */
+#low-hp{ position:fixed; inset:0; z-index:22; pointer-events:none; opacity:0; transition:opacity .5s;
+  background:radial-gradient(ellipse at center, rgba(232,68,46,0) 48%, rgba(232,68,46,.42) 100%); }
+#low-hp.show{ opacity:1; animation:low-hp-beat 1.05s infinite; }
+@keyframes low-hp-beat{ 0%,100%{ filter:brightness(.95); } 55%{ filter:brightness(1.5); } }
 #mh-prompt{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(140px + env(safe-area-inset-bottom));
   z-index:25; pointer-events:auto; white-space:nowrap; }
 #drop-btn{ position:fixed; left:50%; bottom:calc(58px + env(safe-area-inset-bottom)); z-index:25;
@@ -489,6 +528,10 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   </div>
 </div>
 <button class="btn small hidden" id="mh-prompt"></button>
+<div id="low-hp"></div>
+<div id="mh-alert"></div>
+<div id="mh-streak"></div>
+<div id="hit-dir"><div class="hd-ring"></div><div class="hd-arrow" id="hd-arrow"><i></i></div><div class="hd-dist" id="hd-dist"></div></div>
 <div id="kill-feed" class="hidden"></div>
 <canvas id="mh-map" class="hidden" width="232" height="232"></canvas>
 <button class="btn hidden" id="drop-btn">🪂 &nbsp;লাফ দাও!</button>

@@ -38,6 +38,8 @@ const el = {
   mhInv: $('mh-inv'), mhPrompt: $('mh-prompt'), killFeed: $('kill-feed'), dropBtn: $('drop-btn'),
   mhFire: $('mh-fire'), mhWall: $('mh-wall'), mhBomb: $('mh-bomb'), mhCrouch: $('mh-crouch'),
   mhWallN: $('mh-wall-n'), mhBombN: $('mh-bomb-n'), mhMap: $('mh-map'),
+  mhAlert: $('mh-alert'), mhStreak: $('mh-streak'),
+  hitDir: $('hit-dir'), hdArrow: $('hd-arrow'), hdDist: $('hd-dist'), lowHp: $('low-hp'),
   qHead: $('q-head'), qHeadTxt: $('q-head-txt'), qClose: $('q-close'), dStatLabel: $('d-stat-label'),
   btnReview: $('btn-hud-review'), reviewN: $('review-n'),
   btnShop: $('btn-shop'), shop: $('screen-shop'), shopWallet: $('shop-wallet'), shopTabs: $('shop-tabs'),
@@ -173,6 +175,11 @@ const AU = {
       case 'victory': [523,659,784,1047].forEach((f,i)=> this.tone({type:'triangle', f0:f, dur:0.28, vol:0.25, when:i*0.13})); break;
       case 'defeat': [392,330,262,196].forEach((f,i)=> this.tone({type:'triangle', f0:f, dur:0.34, vol:0.25, when:i*0.17})); break;
       case 'gate': this.tone({type:'sine', f0:180, f1:720, dur:0.8, vol:0.2, attack:0.2}); break;
+      case 'siren': this.tone({type:'sawtooth', f0:520, f1:900, dur:0.5, vol:0.2});
+                    this.tone({type:'sawtooth', f0:900, f1:520, dur:0.5, vol:0.2, when:0.55}); break;
+      case 'heart': this.tone({type:'sine', f0:80, f1:50, dur:0.13, vol:0.5});
+                    this.tone({type:'sine', f0:72, f1:46, dur:0.11, vol:0.34, when:0.19}); break;
+      case 'streak': [660,880,1320].forEach((f,i)=> this.tone({type:'triangle', f0:f, dur:0.16, vol:0.24, when:i*0.08})); break;
     }
   },
   startAmbient(){

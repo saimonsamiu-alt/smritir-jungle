@@ -653,7 +653,13 @@ export async function startMatch(){
     crouch:false, crouchK:0, crouchTip:false,
     pings:[], mapT:0,
     airs:[], airLeft:2, airT: rand(AIR_FIRST[0], AIR_FIRST[1]),
+    streak:0, lastKillT:-99, lowHpOn:false, lowBeepT:0,
   };
+  // গত ম্যাচের সতর্কবার্তা/ভিগনেট যেন লিক না করে
+  if(ctx.el.lowHp) ctx.el.lowHp.classList.remove('show');
+  if(ctx.el.hitDir) ctx.el.hitDir.classList.remove('show');
+  if(ctx.el.mhAlert) ctx.el.mhAlert.classList.remove('show');
+  if(ctx.el.mhStreak) ctx.el.mhStreak.classList.remove('show');
 
   // hide story objects for the match (restore on exit)
   const scene = ctx.scene();
@@ -744,6 +750,10 @@ export function exitMatch(){
   if(ctx.el.mhMap) ctx.hide(ctx.el.mhMap);
   ctx.hide(ctx.el.killFeed); ctx.hide(ctx.el.qPanel); ctx.hide(ctx.el.qHead);
   ctx.el.killFeed.innerHTML = '';
+  if(ctx.el.lowHp) ctx.el.lowHp.classList.remove('show');
+  if(ctx.el.hitDir) ctx.el.hitDir.classList.remove('show');
+  if(ctx.el.mhAlert) ctx.el.mhAlert.classList.remove('show');
+  if(ctx.el.mhStreak) ctx.el.mhStreak.classList.remove('show');
   if(ctx.el.dStatLabel) ctx.el.dStatLabel.textContent = 'এই যুদ্ধে উত্তর ঠিক';
 
   const sid = M.sessionId, ended = M.sessionEnded;
@@ -1105,6 +1115,39 @@ function addFeed(text){
   setTimeout(() => d.remove(), 4600);
 }
 
+// উপরের সতর্কবার্তা-ফালকা (বলয় ছোট হওয়া, শেষ বলয়)
+function banner(text, cls, ms){
+  const b = ctx.el.mhAlert;
+  if(!b) return;
+  b.textContent = text;
+  b.className = cls || '';
+  b.classList.add('show');
+  clearTimeout(banner._t);
+  banner._t = setTimeout(() => b.classList.remove('show'), ms || 2600);
+}
+// কিল-স্ট্রিকের সোনালি ফালকা
+function streakBanner(text, ms){
+  const s = ctx.el.mhStreak;
+  if(!s) return;
+  s.textContent = text;
+  s.classList.add('show');
+  clearTimeout(streakBanner._t);
+  streakBanner._t = setTimeout(() => s.classList.remove('show'), ms || 2800);
+}
+// কোন দিক থেকে গুলি এল — তীর ঘোরানো + দূরত্ব
+function hitDirShow(srcPos){
+  const hd = ctx.el.hitDir;
+  if(!hd) return;
+  const p = P_pos();
+  const dx = srcPos.x - p.x, dz = srcPos.z - p.z;
+  const deg = ((((ctx.G.camYaw + Math.PI) - Math.atan2(dx, dz)) * 180 / Math.PI + 540) % 360) - 180;
+  if(ctx.el.hdArrow) ctx.el.hdArrow.style.transform = 'rotate(' + deg.toFixed(1) + 'deg)';
+  if(ctx.el.hdDist) ctx.el.hdDist.textContent = bn(Math.round(Math.hypot(dx, dz))) + ' মিটার';
+  hd.classList.add('show');
+  clearTimeout(hitDirShow._t);
+  hitDirShow._t = setTimeout(() => hd.classList.remove('show'), 1700);
+}
+
 // ============================== COMbat (রিয়েল-টাইম) ==============================
 function facePlayerTo(pos){
   const p = P_pos();
@@ -1307,7 +1350,7 @@ function botShoot(b, target){
       return;
     }
     const raw = rand(7, 11);
-    spawnShot(from, to, TRACER_BOT, () => playerHit(raw));
+    spawnShot(from, to, TRACER_BOT, () => playerHit(raw, b));
     return;
   }
   // বট-বনাম-বট: খেয়ালি গুলি ফসকে যায়
@@ -1326,7 +1369,7 @@ function botShoot(b, target){
   });
 }
 
-function playerHit(raw){
+function playerHit(raw, src){
   if(!M || M.phase !== 'live') return;
   const dmg = Math.max(1, Math.round(raw * (M.inv.armor ? 0.7 : 1)));
   M.hp -= dmg;
@@ -1335,6 +1378,7 @@ function playerHit(raw){
   ctx.G.shake = Math.max(ctx.G.shake || 0, 0.45);
   const at = P_pos().clone(); at.y += 1.9;
   ctx.floater(at, '-' + bn(dmg), '#FF6A55');
+  if(src && src.grp) hitDirShow(src.grp.position);
   updateHpHud();
   if(M.hp <= 0) endMatch(false);
 }
@@ -1352,6 +1396,12 @@ function killBot(b, killer){
     ctx.AU.sfx('coin');
     ctx.toast('🎯 ' + b.name + ' টিকে থাকতে পারল না!', 1800);
     addFeed('🎯 তুমি ' + b.name + '-কে হারিয়ে দিলে');
+    // টানা জয় — ফ্রি-ফায়ারের 'RAMBO' ধাঁচের স্ট্রিক-ফালকা
+    const now = ctx.G.time;
+    M.streak = (now - (M.lastKillT || -99) < 26) ? (M.streak || 0) + 1 : 1;
+    M.lastKillT = now;
+    const msg = {3:'🔥 টানা ৩ জয়!', 5:'⚡ থামানো যাচ্ছে না — টানা ৫!', 7:'👑 অপ্রতিরোধ্য — টানা ৭!', 10:'🌟 কিংবদন্তি — টানা ১০!'}[M.streak];
+    if(msg){ streakBanner(msg); ctx.AU.sfx('streak'); }
   } else if(killer === 'বলয়'){
     addFeed('🔵 বলয়ের চাপে ' + b.name + ' বিদায় নিল');
   } else {
@@ -1624,11 +1674,15 @@ function zoneTick(dt){
 
   if(z.state === 'wait'){
     z.t -= dt;
+    const bt = Math.ceil(z.t);
+    if(bt <= 8 && !z.warn8){ z.warn8 = true; banner('⚠️ বলয় ' + bn(bt) + ' সেকেন্ডে ছোট হবে', 'blink', 1700); ctx.AU.sfx('siren'); }
+    if(bt <= 3 && !z.warn3){ z.warn3 = true; banner('⚠️ বলয় ছোট হবে — ' + bn(Math.max(1, bt)), 'blink', 1500); }
     if(z.t <= 0){
       if(z.idx + 1 >= ZONE_STAGES.length){
         z.state = 'final';
         ctx.toast('☠️ শেষ বলয়! এটা আর থামবে না — শেষ পর্যন্ত টিকে থাকো', 3200);
-        ctx.AU.sfx('gate');
+        banner('☠️ শেষ বলয় — আর থামবে না!', 'blink', 4200);
+        ctx.AU.sfx('gate'); ctx.AU.sfx('siren');
       }
       else {
         const nx = ZONE_STAGES[z.idx + 1];
@@ -1637,8 +1691,10 @@ function zoneTick(dt){
         z.to = { r: nx.r, cx: z.cx + Math.cos(a)*off, cz: z.cz + Math.sin(a)*off };
         z.state = 'shrink';
         z.t = ZONE_STAGES[z.idx].s;
+        z.warn8 = z.warn3 = false;
         ctx.toast('🔵 বলয় ছোট হচ্ছে — নীল দেয়ালের ভিতরে থেকো!', 2600);
-        ctx.AU.sfx('gate');
+        banner('🔵 বলয় ছোট হচ্ছে — ভিতরে এসো!', 'blink', 3400);
+        ctx.AU.sfx('gate'); ctx.AU.sfx('siren');
       }
     }
   } else if(z.state === 'shrink'){
@@ -1907,6 +1963,21 @@ export function tick(dt){
   lootTick(dt);
   promptTick();
   minimapTick(dt);
+  lowHpTick(dt);
+}
+
+// কম HP — লাল কিনারা স্পন্দন + হৃদস্পন্দনের শব্দ (ফ্রি-ফায়ার-ধাঁচ)
+function lowHpTick(dt){
+  const low = M.hp > 0 && M.hp / M.hpMax <= 0.35;
+  if(low !== M.lowHpOn){
+    M.lowHpOn = low;
+    if(ctx.el.lowHp) ctx.el.lowHp.classList.toggle('show', low);
+    M.lowBeepT = low ? 0.35 : 0;
+  }
+  if(low){
+    M.lowBeepT -= dt;
+    if(M.lowBeepT <= 0){ M.lowBeepT = 1.05; ctx.AU.sfx('heart'); }
+  }
 }
 
 export function tickPlayer(dt){
@@ -2025,6 +2096,9 @@ async function endMatch(won){
   closePanel();
   ctx.hide(ctx.el.mhPrompt);
   if(ctx.el.mhMap) ctx.hide(ctx.el.mhMap);
+  if(ctx.el.lowHp) ctx.el.lowHp.classList.remove('show');
+  if(ctx.el.hitDir) ctx.el.hitDir.classList.remove('show');
+  M.lowHpOn = false;
 
   const aliveBots = M.bots.filter(b => b.alive).length;
   const rank = won ? 1 : aliveBots + 1;
