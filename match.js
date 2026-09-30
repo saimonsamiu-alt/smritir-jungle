@@ -182,6 +182,68 @@ function shotsTick(dt){
   }
 }
 
+// ---------- muzzle flash (বন্দুকের মুখের আগুন) ----------
+let flashGeo = null, flashMatP = null, flashMatB = null;
+const FLASHES = [];
+function ensureFlash(){
+  if(flashGeo) return;
+  flashGeo = new THREE.SphereGeometry(0.30, 8, 6);
+  flashGeo.scale(0.72, 0.72, 2.1);   // সামনের দিকে টানা লম্বা শিখা
+  flashMatP = new THREE.MeshBasicMaterial({ color: 0xffd76a, transparent: true, opacity: 0.95,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  flashMatB = new THREE.MeshBasicMaterial({ color: 0xff9a5a, transparent: true, opacity: 0.8,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+}
+function muzzleFlash(at, dir, player, scale){
+  if(!M) return;
+  ensureFlash();
+  const mat = (player ? flashMatP : flashMatB).clone();
+  const grp = new THREE.Group();
+  grp.add(new THREE.Mesh(flashGeo, mat));
+  const cross = new THREE.Mesh(flashGeo, mat);   // আড়াআড়ি দ্বিতীয় পাপড়ি — ফুলের মতো আগুন
+  cross.rotation.z = Math.PI / 2;
+  cross.scale.set(0.58, 0.58, 0.55);
+  grp.add(cross);
+  grp.position.copy(at);
+  grp.quaternion.setFromUnitVectors(Z_AXIS, dir.lengthSq() > 1e-6 ? dir.clone().normalize() : Z_AXIS);
+  const s = (scale || 1) * rand(0.9, 1.25);
+  grp.scale.set(s, s, s);
+  ctx.scene().add(grp);
+  let light = null, light0 = 0;
+  if(player && ctx.G.settings && ctx.G.settings.quality === 'high'){
+    light0 = 7;
+    light = new THREE.PointLight(0xffc063, light0, 16, 2);
+    light.position.copy(at);
+    ctx.scene().add(light);
+  }
+  FLASHES.push({ grp, mat, light, light0, o0: mat.opacity, t: 0, life: player ? 0.085 : 0.06, s });
+}
+function flashesTick(dt){
+  for(let i = FLASHES.length - 1; i >= 0; i--){
+    const f = FLASHES[i];
+    f.t += dt;
+    const k = Math.min(1, f.t / f.life);
+    f.mat.opacity = f.o0 * (1 - k);
+    const s = f.s * (1 - k * 0.4);
+    f.grp.scale.set(s, s, s);
+    if(f.light) f.light.intensity = f.light0 * (1 - k) * (1 - k);
+    if(k >= 1){
+      ctx.scene().remove(f.grp);
+      if(f.light) ctx.scene().remove(f.light);
+      f.mat.dispose();
+      FLASHES.splice(i, 1);
+    }
+  }
+}
+function clearFlashes(){
+  for(const f of FLASHES){
+    ctx.scene().remove(f.grp);
+    if(f.light) ctx.scene().remove(f.light);
+    f.mat.dispose();
+  }
+  FLASHES.length = 0;
+}
+
 // ============================== BUILD ==============================
 function buildPlane(){
   const scene = ctx.scene();
@@ -313,22 +375,33 @@ function lootSpot(kind, i){
   }
   const y = groundY(x, z);
   const grp = new THREE.Group();
+  const glowCol = new THREE.Color(k.color).lerp(new THREE.Color(0xffffff), 0.45);
   const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.5, 0.5, 26, 10, 1, true),
-    new THREE.MeshBasicMaterial({ color: k.color, transparent: true, opacity: 0.25,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    new THREE.CylinderGeometry(0.62, 0.62, 26, 10, 1, true),
+    new THREE.MeshBasicMaterial({ color: k.color, transparent: true, opacity: 0.28,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
   beam.position.y = 13; grp.add(beam);
+  const core = new THREE.Mesh(   // ভেতরের উজ্জ্বল কাঠি — লুট দূর থেকেই চোখে পড়ে
+    new THREE.CylinderGeometry(0.17, 0.17, 25, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: glowCol, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  core.position.y = 12.5; grp.add(core);
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(1.5, 2.1, 26),
-    new THREE.MeshBasicMaterial({ color: k.color, transparent: true, opacity: 0.5,
+    new THREE.MeshBasicMaterial({ color: k.color, transparent: true, opacity: 0.55,
       side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; grp.add(ring);
+  const halo = new THREE.Mesh(   // মাটিতে নরম আভা
+    new THREE.RingGeometry(2.1, 3.5, 26),
+    new THREE.MeshBasicMaterial({ color: k.color, transparent: true, opacity: 0.15,
+      side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.rotation.x = -Math.PI / 2; halo.position.y = 0.1; grp.add(halo);
   const item = buildItemMesh(kind);
   item.traverse(o => { if(o.isMesh) o.castShadow = true; });
   grp.add(item);
   grp.position.set(x, y, z);
   scene.add(grp);
-  M.loot.push({ kind, i, x, z, y, grp, beam, ring, item, got: 0, alive: true });
+  M.loot.push({ kind, i, x, z, y, grp, beam, core, ring, halo, item, got: 0, alive: true });
 }
 
 function buildLoot(){
@@ -730,6 +803,7 @@ export function exitMatch(){
   for(const s of M.loot) if(s.alive) scene.remove(s.grp);
   for(const b of M.bots){ scene.remove(b.grp); if(b.chute) scene.remove(b.chute); }
   for(const s of M.shots) scene.remove(s.grp);
+  clearFlashes();
   for(const w of M.walls){ scene.remove(w.mesh); w.mat.dispose(); }
   if(M.zone) scene.remove(M.zone.wall);
   for(const a of (M.airs || [])){ if(a.plane) scene.remove(a.plane); if(a.grp) scene.remove(a.grp); }
@@ -1214,6 +1288,15 @@ function combatTick(dt){
   to.y += 1.15 + rand(-0.15, 0.15);
   to.x += rand(-0.5, 0.5); to.z += rand(-0.5, 0.5);
   ctx.AU.sfx('zap');
+  // বন্দুকের মুখে আগুন + ক্যামেরার রিকয়েল — গুলি ছাড়ার আসল অনুভূতি
+  const fdir = to.clone().sub(from);
+  const fh = fdir.clone(); fh.y = 0;
+  if(fh.lengthSq() < 1e-4) fh.set(Math.sin(ctx.P.facing), 0, Math.cos(ctx.P.facing));
+  fh.normalize();
+  const muzzle = p.clone().addScaledVector(fh, 0.9);
+  muzzle.y = p.y + 1.5 - 0.45 * M.crouchK - 0.30;
+  muzzleFlash(muzzle, fdir, true, gun === 3 ? 1.35 : (gun === 2 ? 1.1 : 0.9));
+  ctx.G.camKick = Math.max(ctx.G.camKick || 0, gun === 3 ? 0.55 : (gun === 2 ? 0.42 : 0.32));
   const tier = gun;
   const ob = shotObstacle(from, to);
   if(ob){
@@ -1343,7 +1426,14 @@ function botShoot(b, target){
   to.y += 1.1 + (Math.random()-0.5)*0.7;
   to.x += (Math.random()-0.5)*1.4;
   to.z += (Math.random()-0.5)*1.4;
-  if(b.grp.position.distanceTo(P_pos()) < 45) ctx.AU.sfx('zap'); // দূরের লড়াইয়ের শব্দ কানে আসে না
+  const bDist = b.grp.position.distanceTo(P_pos());
+  if(bDist < 62){ // খুব দূরের ফ্ল্যাশ চোখে পড়ে না — তখন আঁকাই বাদ
+    const bf = v3(Math.sin(b.grp.rotation.y), 0, Math.cos(b.grp.rotation.y));
+    const bm = b.grp.position.clone().addScaledVector(bf, 0.75);
+    bm.y = b.grp.position.y + 1.22;
+    muzzleFlash(bm, to.clone().sub(from), false, 0.85);
+  }
+  if(bDist < 45) ctx.AU.sfx('zap'); // দূরের লড়াইয়ের শব্দ কানে আসে না
   const ob = shotObstacle(from, to);
   if(ob){
     const hit = from.clone().lerp(to, ob.t);
@@ -1758,9 +1848,11 @@ function lootTick(dt){
     if(s.air) continue; // বাক্সের ধোঁয়া-আলো airdropTick নিজেই চালায়
     s.item.rotation.y += dt * 1.4;
     s.item.position.y = Math.sin(ctx.G.time * 1.8 + s.i) * 0.09;
-    s.beam.material.opacity = 0.22 + Math.sin(ctx.G.time * 2.4 + s.i) * 0.07;
+    s.beam.material.opacity = 0.24 + Math.sin(ctx.G.time * 2.4 + s.i) * 0.08;
+    s.core.material.opacity = 0.42 + Math.sin(ctx.G.time * 3.1 + s.i) * 0.15;
     const sc = 1 + Math.sin(ctx.G.time * 2.2 + s.i) * 0.06;
     s.ring.scale.set(sc, sc, 1);
+    s.halo.material.opacity = 0.13 + Math.sin(ctx.G.time * 2.2 + s.i) * 0.05;
   }
 }
 
@@ -1840,12 +1932,16 @@ function landCrate(a){
   const gy = groundY(a.x, a.z);
   a.y = gy;
   const col = 0xFF5A45;
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 30, 10, 1, true),
-    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 30, 10, 1, true),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.24,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
   beam.position.y = 15; a.grp.add(beam);
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 29, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffd0b8, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  core.position.y = 14.5; a.grp.add(core);
   const ring = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.4, 26),
-    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5,
+    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55,
       side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; a.grp.add(ring);
   if(!puffGeo) puffGeo = new THREE.SphereGeometry(0.55, 7, 6);
@@ -1856,7 +1952,7 @@ function landCrate(a){
     a.smoke.push({ m, ph: i / 6 });
     a.grp.add(m);
   }
-  a.beam = beam; a.ring = ring;
+  a.beam = beam; a.ring = ring; a.core = core;
   const spot = { kind:'airdrop', i: 900 + a.id, x: a.x, z: a.z, y: gy, grp: a.grp,
     beam, ring, item: a.crate, got: 0, alive: true, air: a };
   a.spot = spot;
@@ -1910,7 +2006,8 @@ function airdropTick(dt){
       const gy = groundY(a.x, a.z);
       if(a.grp.position.y <= gy + 0.06){ a.grp.position.y = gy; landCrate(a); }
     } else if(a.state === 'landed'){
-      a.beam.material.opacity = 0.2 + Math.sin(ctx.G.time * 2.4) * 0.07;
+      a.beam.material.opacity = 0.22 + Math.sin(ctx.G.time * 2.4) * 0.08;
+      a.core.material.opacity = 0.44 + Math.sin(ctx.G.time * 3.1) * 0.16;
       const sc = 1 + Math.sin(ctx.G.time * 2.2) * 0.06;
       a.ring.scale.set(sc, sc, 1);
       for(const p of a.smoke){
@@ -1955,7 +2052,7 @@ function planeTick(dt){
 
 export function tick(dt){
   if(!M) return;
-  if(M.phase === 'over'){ shotsTick(dt); return; }
+  if(M.phase === 'over'){ shotsTick(dt); flashesTick(dt); return; }
   if(M.phase === 'plane' || M.phase === 'drop'){
     planeTick(dt);
     botsDropTick(dt);
@@ -1970,6 +2067,7 @@ export function tick(dt){
   lodTick(dt);
   combatTick(dt);
   shotsTick(dt);
+  flashesTick(dt);
   wallTick(dt);
   lootTick(dt);
   promptTick();

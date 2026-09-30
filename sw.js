@@ -1,5 +1,5 @@
 // Service Worker — স্মৃতির জঙ্গল (standalone game PWA, scope: ./game/)
-const CACHE_NAME = 'smritir-jungle-v21';
+const CACHE_NAME = 'smritir-jungle-v22';
 const PRECACHE = [
   './',
   './index.html',
@@ -11,6 +11,16 @@ const PRECACHE = [
   './icon-512.png',
   './icon-maskable-512.png',
   './vendor/GLTFLoader.js',
+  './vendor/addons/postprocessing/EffectComposer.js',
+  './vendor/addons/postprocessing/MaskPass.js',
+  './vendor/addons/postprocessing/OutputPass.js',
+  './vendor/addons/postprocessing/Pass.js',
+  './vendor/addons/postprocessing/RenderPass.js',
+  './vendor/addons/postprocessing/ShaderPass.js',
+  './vendor/addons/postprocessing/UnrealBloomPass.js',
+  './vendor/addons/shaders/CopyShader.js',
+  './vendor/addons/shaders/LuminosityHighPassShader.js',
+  './vendor/addons/shaders/OutputShader.js',
   './utils/BufferGeometryUtils.js',
 ];
 const MODEL_FILES = ['tree_palmTall','tree_palmDetailedTall','tree_palmBend','tree_default','tree_tall','tree_fat',

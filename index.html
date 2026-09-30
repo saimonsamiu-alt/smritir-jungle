@@ -151,6 +151,10 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 .bh-label{ font-size:11px; color:var(--dim); letter-spacing:.5px; margin-bottom:5px; display:flex; justify-content:space-between; gap:8px; }
 .bh-label b{ color:var(--txt); }
 .bar.mhp{ height:18px; } .bar.mhp > i{ background:linear-gradient(90deg,#8E2413,var(--red)); box-shadow:0 0 14px rgba(232,68,46,.55); }
+/* HP-বারে কাচের মতো চকচকে আভা — ফ্রি-ফায়ার-ধাঁচ */
+.bar.hp::after, .bar.mhp::after{ content:''; position:absolute; left:2px; right:2px; top:1px; height:42%;
+  border-radius:99px; pointer-events:none;
+  background:linear-gradient(180deg, rgba(255,255,255,.30), rgba(255,255,255,0)); }
 #battle-combo{ margin-top:6px; font-weight:800; font-size:13px; color:var(--accent2); min-height:17px;
   text-shadow:0 0 14px rgba(255,196,107,.6); }
 #battle-timer{ position:absolute; top:calc(66px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
@@ -317,9 +321,11 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 #mh-top{ position:absolute; top:calc(8px + env(safe-area-inset-top)); left:10px; right:10px;
   display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
 .mh-chips{ display:flex; gap:8px; align-items:center; pointer-events:auto; }
-.mh-chip{ background:var(--panel); border:1px solid var(--line); border-radius:13px;
-  padding:9px 12px; font-size:13px; font-weight:700; color:var(--txt);
-  box-shadow:var(--shadow); backdrop-filter:blur(10px); }
+.mh-chip{ background:linear-gradient(180deg, rgba(46,66,58,.9), rgba(16,26,22,.92));
+  border:1px solid rgba(150,200,170,.26); border-radius:14px;
+  padding:9px 13px; font-size:13px; font-weight:800; color:var(--txt); letter-spacing:.2px;
+  box-shadow:0 6px 16px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.1);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
 .mh-chip.danger{ color:#FFB4A6; border-color:rgba(232,68,46,.55); background:rgba(232,68,46,.2); }
 #mh-inv{ position:absolute; left:12px; bottom:calc(58px + env(safe-area-inset-bottom));
   display:flex; gap:8px; flex-wrap:wrap; max-width:62vw; pointer-events:auto; }
@@ -331,8 +337,10 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   display:flex; flex-direction:column; gap:6px; align-items:flex-end; pointer-events:none; max-width:72vw; }
 .feed-item{ background:rgba(8,14,12,.82); border:1px solid var(--line); border-radius:12px;
   padding:7px 12px; font-size:12.5px; font-weight:600; color:var(--txt);
-  text-shadow:0 1px 2px #000; transition:opacity .9s; }
+  text-shadow:0 1px 2px #000; transition:opacity .9s;
+  animation:feed-pop .26s ease-out; }
 .feed-item.fade{ opacity:0; }
+@keyframes feed-pop{ 0%{ opacity:0; transform:translateX(20px) scale(.94); } 100%{ opacity:1; transform:none; } }
 
 /* জোন-সতর্কবার্তা, কিল-স্ট্রিক, আঘাতের দিক — ফ্রি-ফায়ার-ধাঁচ */
 #mh-alert{ position:fixed; left:50%; top:calc(60px + env(safe-area-inset-top));
@@ -387,8 +395,9 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 #mh-actions{ position:absolute; right:14px; bottom:calc(34px + env(safe-area-inset-bottom));
   display:flex; align-items:flex-end; gap:12px; pointer-events:auto; }
 .act-btn{ width:58px; height:58px; border-radius:50%; border:1px solid var(--line);
-  background:var(--panel); color:var(--txt); font-size:24px; line-height:1;
-  box-shadow:var(--shadow); backdrop-filter:blur(10px); position:relative;
+  background:linear-gradient(180deg, rgba(52,74,64,.9), rgba(14,24,20,.92)); color:var(--txt); font-size:24px; line-height:1;
+  box-shadow:0 6px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.11), inset 0 -6px 12px rgba(0,0,0,.28);
+  backdrop-filter:blur(10px); position:relative;
   display:flex; align-items:center; justify-content:center;
   touch-action:none; user-select:none; -webkit-user-select:none; }
 .act-btn:active{ transform:scale(.9); }
@@ -405,7 +414,8 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   border-color:rgba(255,216,150,.65);
   background:radial-gradient(circle at 34% 30%, #ffd08a, #ff7a2e 52%, #c9411a);
   box-shadow:0 6px 22px rgba(255,122,46,.45), inset 0 -6px 14px rgba(120,20,0,.4);
-  transition:transform .08s; }
+  transition:transform .08s; animation:fire-idle 2.2s ease-in-out infinite; }
+@keyframes fire-idle{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.16) saturate(1.08); } }
 #mh-fire.down{ transform:scale(.9); box-shadow:0 0 26px 6px rgba(255,150,60,.75); }
 
 /* ---------- কম্পাস-পটি (দিকের ফালকা) ---------- */
@@ -705,7 +715,7 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 <div id="fade-black"></div>
 
 <script type="importmap">
-{ "imports": { "three": "./vendor/three.module.js" } }
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
 </script>
 <script type="module" src="./game.js"></script>
 <script>

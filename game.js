@@ -7,6 +7,10 @@
 // ============================================================
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import * as MATCH from './match.js';
 
 // ============================== DOM ==============================
@@ -237,7 +241,7 @@ const G = {
   keys: {}, joyVec: {x:0, y:0}, camYaw: Math.PI, camPitch: 0.32,
   monsters: [], battle: null,
   askedThisSession: [], correctThisSession: 0,
-  shake: 0, hitStop: 0, time: 0,
+  shake: 0, camKick: 0, hitStop: 0, time: 0,
   deferredInstall: null,
 };
 
@@ -276,6 +280,11 @@ function applyQuality(){
   scene.traverse(o => {
     if(o.material){ (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.needsUpdate = true); }
   });
+  if(composer && bloomPass){
+    composer.setPixelRatio(qualityPixelRatio());
+    bloomPass.enabled = G.settings.quality !== 'low';
+    bloomPass.strength = G.settings.quality === 'high' ? 0.62 : 0.45;
+  }
 }
 function sensText(v){ return bnNum(Number(v).toFixed(1)) + 'x'; }
 function refreshSettingsUI(){
@@ -404,7 +413,7 @@ function equippedItem(slot){
 }
 
 // ============================== THREE SETUP ==============================
-let renderer, scene, camera, clock, sunLight, hemi, skyMat;
+let renderer, scene, camera, clock, sunLight, hemi, skyMat, composer, bloomPass;
 const WORLD_R = 100;
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
 // আড়ালের জায়গা (বড় ম্যাচে লুকানোর জন্য): ঝোপ + বড় পাথর
@@ -683,16 +692,46 @@ function heightAt(x, z){
   return h;
 }
 
+// ---------- ground detail texture (procedural — no downloads) ----------
+function makeGroundTex(){
+  const S = 256;
+  const cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#ffffff'; c.fillRect(0, 0, S, S);
+  // বড় নরম ছোপ — ঘাসের ভেতরে গাঢ়/হালকা জমি
+  for(let i=0;i<170;i++){
+    const x = Math.random()*S, y = Math.random()*S, r = 6 + Math.random()*34;
+    const l = 168 + Math.floor(Math.random()*84);
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(' + l + ',' + l + ',' + l + ',0.55)');
+    g.addColorStop(1, 'rgba(' + l + ',' + l + ',' + l + ',0)');
+    c.fillStyle = g; c.fillRect(x-r, y-r, r*2, r*2);
+  }
+  // সূক্ষ্ম দানা — মাটির বুনট
+  const img = c.getImageData(0, 0, S, S), d = img.data;
+  for(let i=0;i<d.length;i+=4){
+    const n = (Math.random()-0.5) * 30;
+    d[i] = Math.max(0, Math.min(255, d[i]+n));
+    d[i+1] = Math.max(0, Math.min(255, d[i+1]+n));
+    d[i+2] = Math.max(0, Math.min(255, d[i+2]+n));
+  }
+  c.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(96, 96);
+  t.anisotropy = 4;
+  return t;
+}
 function buildTerrain(){
   const size = 360, segs = 168;
   const geo = new THREE.PlaneGeometry(size, size, segs, segs);
   geo.rotateX(-Math.PI/2);
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
-  const cFloor = new THREE.Color(0x24361c), cMoss = new THREE.Color(0x3f6b2e),
-        cDirt = new THREE.Color(0x54452c), cPath = new THREE.Color(0x6a5a3c),
-        cWet = new THREE.Color(0x1e3a33), cRock = new THREE.Color(0x4a5248),
-        cFrost = new THREE.Color(0xb9c6ca);
+  const cFloor = new THREE.Color(0x2e4a22), cMoss = new THREE.Color(0x517f36),
+        cDirt = new THREE.Color(0x6a5a3a), cPath = new THREE.Color(0x86744e),
+        cWet = new THREE.Color(0x28504a), cRock = new THREE.Color(0x6a7268),
+        cFrost = new THREE.Color(0xd6e2e6);
   for(let i=0;i<pos.count;i++){
     const x = pos.getX(i), z = pos.getZ(i);
     const h = heightAt(x, z);
@@ -712,7 +751,7 @@ function buildTerrain(){
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.96, metalness: 0.02 });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.96, metalness: 0.02, map: makeGroundTex() });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   scene.add(mesh);
@@ -724,23 +763,38 @@ function buildSky(){
   skyMat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
-      uTop: { value: new THREE.Color(0.02,0.09,0.11) },
-      uMid: { value: new THREE.Color(0.10,0.25,0.22) },
-      uHor: { value: new THREE.Color(0.72,0.60,0.34) },
-      uSun: { value: new THREE.Color(1.00,0.86,0.55) },
+      uTop: { value: new THREE.Color(0.10,0.22,0.30) },
+      uMid: { value: new THREE.Color(0.26,0.48,0.52) },
+      uHor: { value: new THREE.Color(0.85,0.78,0.55) },
+      uSun: { value: new THREE.Color(1.00,0.90,0.62) },
+      uCloud: { value: 0.66 },
+      uT: { value: 0 },
     },
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `
       varying vec3 vP;
       uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uHor; uniform vec3 uSun;
+      uniform float uCloud; uniform float uT;
+      float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+        return mix(mix(h21(i),h21(i+vec2(1.0,0.0)),f.x), mix(h21(i+vec2(0.0,1.0)),h21(i+vec2(1.0,1.0)),f.x), f.y); }
+      float fbm(vec2 p){ float s=0.0, a=0.5; for(int i=0;i<4;i++){ s += a*vn(p); p = p*2.03 + 17.7; a *= 0.5; } return s; }
       void main(){
-        float h = normalize(vP).y;
+        vec3 d = normalize(vP);
+        float h = d.y;
         vec3 c = mix(uHor, uMid, smoothstep(-0.02,0.22,h));
         c = mix(c, uTop, smoothstep(0.2,0.65,h));
-        // sun glow toward -z
-        vec3 d = normalize(vP);
-        float sun = pow(max(0.0, dot(d, normalize(vec3(-0.35,0.16,-0.92)))), 18.0);
-        c += uSun*sun*0.8;
+        // সূর্য — বড় নরম আভা + চোখ-ধাঁধানো কোর (ফ্রি-ফায়ার-ধাঁচ ঝলক)
+        vec3 sunDir = normalize(vec3(-0.35,0.16,-0.92));
+        float sd = max(0.0, dot(d, sunDir));
+        c += uSun * (pow(sd, 120.0)*1.7 + pow(sd, 9.0)*0.38);
+        // মেঘ — উপরে তুলতুলে, দিগন্তের কাছে পাতলা; সময়ের সাথে বয়ে চলে
+        vec2 cuv = d.xz / max(0.16, d.y) * 0.6 + vec2(uT*0.0035, uT*0.0018);
+        float m = fbm(cuv*1.6) * 1.15;
+        float mask = smoothstep(0.015, 0.34, h) * uCloud;
+        float cl = smoothstep(0.5, 0.8, m) * mask;
+        vec3 cloudLit = mix(vec3(0.52,0.58,0.66), uSun + vec3(0.30,0.26,0.22), sd*0.75 + 0.18);
+        c = mix(c, cloudLit, cl*0.9);
         gl_FragColor = vec4(c, 1.0);
       }`
   });
@@ -750,16 +804,16 @@ function buildSky(){
 // ---------- প্রতি বিষয়ের জগতের নিজস্ব পরিবেশ ----------
 // একই জঙ্গল, কিন্তু বিষয় বদলালে আলো-কুয়াশা-আকাশের রং বদলে আলাদা জগৎ মনে হয়
 const WORLD_MOODS = {
-  physics:  { fog:0x0e1a16, hemiSky:0x3a5a40, hemiGround:0x141c10, sun:0xffd9a0,
-              skyTop:[0.02,0.09,0.11], skyMid:[0.10,0.25,0.22], skyHor:[0.72,0.60,0.34], skySun:[1.00,0.86,0.55] },
-  chemistry:{ fog:0x1a0d0d, hemiSky:0x5a3230, hemiGround:0x180d0a, sun:0xffb072,
-              skyTop:[0.09,0.03,0.05], skyMid:[0.28,0.10,0.10], skyHor:[0.78,0.42,0.26], skySun:[1.00,0.60,0.35] },
-  math:     { fog:0x0d1220, hemiSky:0x38466a, hemiGround:0x10141c, sun:0xcfe0ff,
-              skyTop:[0.02,0.05,0.12], skyMid:[0.10,0.18,0.34], skyHor:[0.55,0.62,0.80], skySun:[0.82,0.90,1.00] },
-  biology:  { fog:0x0c1a10, hemiSky:0x2f6a3c, hemiGround:0x0c1a0c, sun:0xd8ffc0,
-              skyTop:[0.02,0.08,0.05], skyMid:[0.08,0.28,0.14], skyHor:[0.50,0.72,0.36], skySun:[0.90,1.00,0.70] },
-  ict:      { fog:0x120c1c, hemiSky:0x4a3a6a, hemiGround:0x120e18, sun:0xd8c4ff,
-              skyTop:[0.06,0.03,0.12], skyMid:[0.20,0.10,0.34], skyHor:[0.62,0.44,0.82], skySun:[0.85,0.75,1.00] },
+  physics:  { fog:0x22382a, hemiSky:0x5a7a5a, hemiGround:0x26331e, sun:0xffe0b0, cloud:0.68,
+              skyTop:[0.10,0.22,0.30], skyMid:[0.26,0.48,0.52], skyHor:[0.85,0.78,0.55], skySun:[1.00,0.90,0.62] },
+  chemistry:{ fog:0x33201a, hemiSky:0x8a5a4a, hemiGround:0x2a1a14, sun:0xffbf8a, cloud:0.52,
+              skyTop:[0.20,0.10,0.14], skyMid:[0.48,0.24,0.22], skyHor:[0.92,0.62,0.38], skySun:[1.00,0.72,0.45] },
+  math:     { fog:0x232c40, hemiSky:0x5a6a9a, hemiGround:0x1a2230, sun:0xd8e8ff, cloud:0.62,
+              skyTop:[0.10,0.18,0.34], skyMid:[0.28,0.42,0.66], skyHor:[0.72,0.78,0.92], skySun:[0.88,0.94,1.00] },
+  biology:  { fog:0x1e3822, hemiSky:0x4a8a50, hemiGround:0x1e3418, sun:0xe0ffc8, cloud:0.56,
+              skyTop:[0.08,0.24,0.14], skyMid:[0.22,0.52,0.30], skyHor:[0.62,0.85,0.50], skySun:[0.92,1.00,0.72] },
+  ict:      { fog:0x241c38, hemiSky:0x6a5a9a, hemiGround:0x1e1830, sun:0xe0ccff, cloud:0.62,
+              skyTop:[0.16,0.10,0.30], skyMid:[0.36,0.24,0.58], skyHor:[0.72,0.56,0.92], skySun:[0.90,0.82,1.00] },
 };
 function applyWorldMood(){
   if(!scene || !sunLight || !hemi) return;
@@ -772,6 +826,7 @@ function applyWorldMood(){
     skyMat.uniforms.uMid.value.setRGB(m.skyMid[0], m.skyMid[1], m.skyMid[2]);
     skyMat.uniforms.uHor.value.setRGB(m.skyHor[0], m.skyHor[1], m.skyHor[2]);
     skyMat.uniforms.uSun.value.setRGB(m.skySun[0], m.skySun[1], m.skySun[2]);
+    skyMat.uniforms.uCloud.value = m.cloud != null ? m.cloud : 0.66;
   }
 }
 
@@ -783,7 +838,7 @@ function buildRiver(){
     const z = 92 - i*7.0;
     const x = RIVER_X(z) + (hash(i,7)-0.5)*3.4;
     const mat = new THREE.MeshStandardMaterial({
-      color: 0x0d3138, emissive: 0x1d7a7a, emissiveIntensity: 0.35,
+      color: 0x16505c, emissive: 0x2fa8a2, emissiveIntensity: 0.5,
       roughness: 0.22, metalness: 0.25, transparent: true, opacity: 0.9
     });
     waterMats.push(mat);
@@ -801,11 +856,11 @@ function buildRiver(){
 // ---------- mountains & far haze ----------
 function buildMountains(){
   const cone = new THREE.ConeGeometry(1, 1, 8);
-  const hazeT = new THREE.Color(0x14212a);
+  const hazeT = new THREE.Color(0x3a4c5a);
   const layers = [
-    { n: 26, r0: 152, r1: 198, h0: 26, h1: 52, rad0: 22, rad1: 44, col: 0x22352a, mix: 0.34, snow: 0   },
-    { n: 20, r0: 205, r1: 258, h0: 50, h1: 90, rad0: 34, rad1: 62, col: 0x2a3d44, mix: 0.52, snow: 0.42 },
-    { n: 12, r0: 268, r1: 335, h0: 92, h1: 152, rad0: 52, rad1: 88, col: 0x35485a, mix: 0.62, snow: 0.38 }
+    { n: 26, r0: 152, r1: 198, h0: 26, h1: 52, rad0: 22, rad1: 44, col: 0x3a5c42, mix: 0.26, snow: 0   },
+    { n: 20, r0: 205, r1: 258, h0: 50, h1: 90, rad0: 34, rad1: 62, col: 0x4a6478, mix: 0.40, snow: 0.50 },
+    { n: 12, r0: 268, r1: 335, h0: 92, h1: 152, rad0: 52, rad1: 88, col: 0x5a7da0, mix: 0.46, snow: 0.45 }
   ];
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(),
         sc = new THREE.Vector3(), e = new THREE.Euler();
@@ -851,7 +906,7 @@ function buildMountains(){
   }
   // haze floor beyond the valley rim — the horizon never shows a void
   const ring = new THREE.Mesh(new THREE.RingGeometry(170, 650, 48),
-    new THREE.MeshBasicMaterial({ color: 0x101d18, fog: false }));
+    new THREE.MeshBasicMaterial({ color: 0x3a4a44, fog: false }));
   ring.rotation.x = -Math.PI/2;
   ring.position.y = 6.5;
   scene.add(ring);
@@ -2405,7 +2460,7 @@ function updateCamera(dt){
       camera.position.x += (cx - camera.position.x) * Math.min(1, dt*7);
       camera.position.y += (cy - camera.position.y) * Math.min(1, dt*7);
       camera.position.z += (cz - camera.position.z) * Math.min(1, dt*7);
-      tmpV.set(target.x, target.y + 1.7, target.z);
+      tmpV.set(target.x, target.y + 1.7 + (G.camKick || 0) * 0.55, target.z);
       camera.lookAt(tmpV);
     }
   }
@@ -2418,6 +2473,8 @@ function updateCamera(dt){
     camera.position.x += (Math.random()-0.5) * G.shake * 0.7;
     camera.position.y += (Math.random()-0.5) * G.shake * 0.7;
   }
+  // রিকয়েল — গুলি ছাড়ার সাথে সাথেই ক্যামেরা উপরে ঝাঁকুনি দিয়ে দ্রুত থেমে যায়
+  if(G.camKick > 0) G.camKick = Math.max(0, G.camKick - dt*3.2);
   // keep sun shadow frustum near the player
   if(sunLight && P.grp){
     sunLight.position.set(P.grp.position.x - 38, 42, P.grp.position.z - 52);
@@ -2450,7 +2507,8 @@ function loop(){
     for(const wm of waterMats) wm.emissiveIntensity = wp;
     if(gateBarrier) gateBarrier.material.opacity = (G.world && G.world.bossUnlocked ? 0.3 : 0.13) + Math.sin(G.time*2)*0.05;
   }
-  renderer.render(scene, camera);
+  if(skyMat) skyMat.uniforms.uT.value = G.time;
+  if(composer) composer.render(); else renderer.render(scene, camera);
 }
 
 // ============================== INIT ==============================
@@ -2462,18 +2520,18 @@ async function initThree(){
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 1.3;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x0e1a16, 0.0075);
+  scene.fog = new THREE.FogExp2(0x22382a, 0.0052);
   camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 1300);
   camera.position.set(30, 18, 60);
   clock = new THREE.Clock();
 
-  hemi = new THREE.HemisphereLight(0x3a5a40, 0x141c10, 0.9);
+  hemi = new THREE.HemisphereLight(0x5a7a5a, 0x26331e, 1.15);
   scene.add(hemi);
-  sunLight = new THREE.DirectionalLight(0xffd9a0, 1.9);
+  sunLight = new THREE.DirectionalLight(0xffe0b0, 2.25);
   sunLight.position.set(-38, 42, -52);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.set(2048, 2048);
@@ -2482,6 +2540,16 @@ async function initThree(){
   sunLight.shadow.camera.far = 160;
   sunLight.shadow.bias = -0.0008;
   scene.add(sunLight); scene.add(sunLight.target);
+  applyQuality();
+
+  // পোস্ট-প্রসেসিং — ঝকঝকে গ্লো (ব্লুম)। কম-স্পেক ফোনে applyQuality এটি বন্ধ করে দেয়।
+  composer = new EffectComposer(renderer);
+  composer.setPixelRatio(qualityPixelRatio());
+  composer.setSize(innerWidth, innerHeight);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.62, 0.55, 0.82);
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
   applyQuality();
 
   setLoad(16, 'জঙ্গলের গাছপালা আনা হচ্ছে…');
@@ -2508,6 +2576,7 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  if(composer) composer.setSize(innerWidth, innerHeight);
 });
 
 // ============================== AUTH & SCREENS ==============================
