@@ -39,6 +39,8 @@ const el = {
   mhFire: $('mh-fire'), mhWall: $('mh-wall'), mhBomb: $('mh-bomb'), mhCrouch: $('mh-crouch'),
   mhWallN: $('mh-wall-n'), mhBombN: $('mh-bomb-n'), mhMap: $('mh-map'),
   mhAlert: $('mh-alert'), mhStreak: $('mh-streak'),
+  mhCompassMove: $('mh-compass-move'), mhCompassNum: $('mh-compass-num'),
+  mhScope: $('mh-scope'), scopeDist: $('scope-dist'), mhZoom: $('mh-zoom'),
   hitDir: $('hit-dir'), hdArrow: $('hd-arrow'), hdDist: $('hd-dist'), lowHp: $('low-hp'),
   qHead: $('q-head'), qHeadTxt: $('q-head-txt'), qClose: $('q-close'), dStatLabel: $('d-stat-label'),
   btnReview: $('btn-hud-review'), reviewN: $('review-n'),
@@ -180,6 +182,9 @@ const AU = {
       case 'heart': this.tone({type:'sine', f0:80, f1:50, dur:0.13, vol:0.5});
                     this.tone({type:'sine', f0:72, f1:46, dur:0.11, vol:0.34, when:0.19}); break;
       case 'streak': [660,880,1320].forEach((f,i)=> this.tone({type:'triangle', f0:f, dur:0.16, vol:0.24, when:i*0.08})); break;
+      case 'scopeIn': this.tone({type:'sine', f0:430, f1:960, dur:0.14, vol:0.18});
+                      this.noise({dur:0.08, vol:0.09, fType:'highpass', f0:3200}); break;
+      case 'scopeOut': this.tone({type:'sine', f0:900, f1:380, dur:0.12, vol:0.16}); break;
     }
   },
   startAmbient(){
@@ -2168,8 +2173,9 @@ function bindInput(){
     for(const t of e.changedTouches){
       if(t.identifier === joyId) joyMove(t.clientX, t.clientY);
       else if(t.identifier === camId){
-        G.camYaw -= (t.clientX - camLast.x) * 0.006;
-        G.camPitch = Math.min(0.9, Math.max(0.05, G.camPitch + (t.clientY - camLast.y) * 0.004));
+        const zs = 1 - 0.62 * MATCH.zoomK();
+        G.camYaw -= (t.clientX - camLast.x) * 0.006 * zs;
+        G.camPitch = Math.min(0.9, Math.max(0.05, G.camPitch + (t.clientY - camLast.y) * 0.004 * zs));
         camLast = {x: t.clientX, y: t.clientY};
       }
     }
@@ -2187,8 +2193,9 @@ function bindInput(){
   canvas.addEventListener('mousedown', e => { mouseDown = true; camLast = {x: e.clientX, y: e.clientY}; });
   addEventListener('mousemove', e => {
     if(!mouseDown) return;
-    G.camYaw -= (e.clientX - camLast.x) * 0.005;
-    G.camPitch = Math.min(0.9, Math.max(0.05, G.camPitch + (e.clientY - camLast.y) * 0.0035));
+    const zs = 1 - 0.62 * MATCH.zoomK();
+    G.camYaw -= (e.clientX - camLast.x) * 0.005 * zs;
+    G.camPitch = Math.min(0.9, Math.max(0.05, G.camPitch + (e.clientY - camLast.y) * 0.0035 * zs));
     camLast = {x: e.clientX, y: e.clientY};
   });
   addEventListener('mouseup', () => mouseDown = false);
@@ -2231,6 +2238,7 @@ function bindInput(){
   el.mhWall.addEventListener('click', () => MATCH.placeWall());
   el.mhBomb.addEventListener('click', () => MATCH.throwBomb());
   el.mhCrouch.addEventListener('click', () => MATCH.toggleCrouch());
+  el.mhZoom.addEventListener('click', () => MATCH.toggleScope());
 }
 
 function togglePause(on){
@@ -2335,6 +2343,10 @@ function updateCamera(dt){
       camera.lookAt(tmpV);
     }
   }
+  // স্কোপ-জুম — FOV কমে, দূরের জিনিস বড় দেখায়
+  const zk = MATCH.zoomK();
+  const fovT = 58 - 36 * zk;
+  if(Math.abs(camera.fov - fovT) > 0.02){ camera.fov = fovT; camera.updateProjectionMatrix(); }
   if(G.shake > 0){
     G.shake = Math.max(0, G.shake - dt*1.8);
     camera.position.x += (Math.random()-0.5) * G.shake * 0.7;

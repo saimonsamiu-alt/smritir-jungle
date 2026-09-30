@@ -651,6 +651,7 @@ export async function startMatch(){
     concealed:false, concealT:0, graceUntil:0, zoneHurtT:0,
     prompt:null, panel:null, outside:false, snap:{},
     crouch:false, crouchK:0, crouchTip:false,
+    scopeOn:false, scopeK:0, scopeVis:false, scopeT:0, scopeHot:false, scopeTip:false,
     pings:[], mapT:0,
     airs:[], airLeft:2, airT: rand(AIR_FIRST[0], AIR_FIRST[1]),
     streak:0, lastKillT:-99, lowHpOn:false, lowBeepT:0,
@@ -660,6 +661,11 @@ export async function startMatch(){
   if(ctx.el.hitDir) ctx.el.hitDir.classList.remove('show');
   if(ctx.el.mhAlert) ctx.el.mhAlert.classList.remove('show');
   if(ctx.el.mhStreak) ctx.el.mhStreak.classList.remove('show');
+  // গত ম্যাচের স্কোপ যেন লিক না করে
+  if(ctx.el.mhScope){ ctx.el.mhScope.classList.remove('show'); ctx.el.mhScope.classList.remove('hot');
+    ctx.el.mhScope.style.opacity = '0'; }
+  if(ctx.el.mhZoom) ctx.el.mhZoom.classList.remove('active');
+  if(ctx.el.scopeDist) ctx.el.scopeDist.textContent = '';
 
   // hide story objects for the match (restore on exit)
   const scene = ctx.scene();
@@ -754,6 +760,10 @@ export function exitMatch(){
   if(ctx.el.hitDir) ctx.el.hitDir.classList.remove('show');
   if(ctx.el.mhAlert) ctx.el.mhAlert.classList.remove('show');
   if(ctx.el.mhStreak) ctx.el.mhStreak.classList.remove('show');
+  if(ctx.el.mhScope){ ctx.el.mhScope.classList.remove('show'); ctx.el.mhScope.classList.remove('hot');
+    ctx.el.mhScope.style.opacity = '0'; }
+  if(ctx.el.mhZoom) ctx.el.mhZoom.classList.remove('active');
+  if(ctx.el.scopeDist) ctx.el.scopeDist.textContent = '';
   if(ctx.el.dStatLabel) ctx.el.dStatLabel.textContent = 'এই যুদ্ধে উত্তর ঠিক';
 
   const sid = M.sessionId, ended = M.sessionEnded;
@@ -1102,6 +1112,7 @@ function updateInvHud(){
   if(ctx.el.mhBombN) ctx.el.mhBombN.textContent = bn(inv.bombs);
   if(ctx.el.mhWall) ctx.el.mhWall.style.opacity = inv.walls ? '' : '0.55';
   if(ctx.el.mhBomb) ctx.el.mhBomb.style.opacity = inv.bombs ? '' : '0.55';
+  if(ctx.el.mhZoom) ctx.el.mhZoom.classList.toggle('empty', inv.gun < 1);
 }
 
 function addFeed(text){
@@ -1964,6 +1975,8 @@ export function tick(dt){
   promptTick();
   minimapTick(dt);
   lowHpTick(dt);
+  compassTick(dt);
+  scopeTick(dt);
 }
 
 // কম HP — লাল কিনারা স্পন্দন + হৃদস্পন্দনের শব্দ (ফ্রি-ফায়ার-ধাঁচ)
@@ -1977,6 +1990,80 @@ function lowHpTick(dt){
   if(low){
     M.lowBeepT -= dt;
     if(M.lowBeepT <= 0){ M.lowBeepT = 1.05; ctx.AU.sfx('heart'); }
+  }
+}
+
+/* ---------- কম্পাস (ফ্রি-ফায়ার-ধাঁচের দিক-পট্টি) ---------- */
+const COMP_CELL = 45, COMP_COPY = 360;
+let compT = 0;
+function compassTick(dt){
+  compT -= dt;
+  if(compT > 0) return;
+  compT = 0.05;
+  const mv = ctx.el.mhCompassMove;
+  if(!mv) return;
+  let f = -((ctx.G.camYaw + Math.PI) * 180 / Math.PI) % 360;
+  if(f < 0) f += 360;
+  mv.style.transform = 'translate3d(' + (-(COMP_COPY + f + COMP_CELL/2)).toFixed(1) + 'px,0,0)';
+  if(ctx.el.mhCompassNum) ctx.el.mhCompassNum.textContent = bn(Math.round(f)) + '°';
+}
+
+/* ---------- স্কোপ (দূরের নিশানা) ---------- */
+export function toggleScope(){
+  if(!M || M.phase !== 'live') return;
+  if(M.inv.gun < 1){ ctx.toast('🔭 স্কোপ বসাতে আগে একটা বন্দুক তোলো', 2400); return; }
+  M.scopeOn = !M.scopeOn;
+  ctx.AU.sfx(M.scopeOn ? 'scopeIn' : 'scopeOut');
+  if(ctx.el.mhZoom) ctx.el.mhZoom.classList.toggle('active', M.scopeOn);
+  if(M.scopeOn && !M.scopeTip){
+    M.scopeTip = true;
+    ctx.toast('🔭 স্কোপ — দূরের শত্রুকে দেখে গুলি করো; নিশানা লাল হলে ঠিক পেয়েছ', 3200);
+  }
+}
+export function zoomK(){ return M ? M.scopeK : 0; }
+
+const SCOPE_CONE = 0.16;
+const SCOPE_MAXD = 130;
+function scopeTick(dt){
+  const target = M.scopeOn ? 1 : 0;
+  const diff = target - M.scopeK;
+  if(Math.abs(diff) > 0.002) M.scopeK += diff * Math.min(1, dt * 6.5);
+  else M.scopeK = target;
+  const el = ctx.el;
+  if(el.mhScope){
+    const vis = M.scopeK > 0.02;
+    if(vis !== M.scopeVis){ M.scopeVis = vis; el.mhScope.classList.toggle('show', vis); }
+    if(vis) el.mhScope.style.opacity = M.scopeK < 0.995 ? M.scopeK.toFixed(3) : '1';
+  }
+  if(M.scopeK > 0.5){
+    M.scopeT -= dt;
+    if(M.scopeT <= 0){ M.scopeT = 0.12; scopeAimTick(el); }
+  } else if(M.scopeHot){
+    M.scopeHot = false;
+    if(el.mhScope) el.mhScope.classList.remove('hot');
+    if(el.scopeDist) el.scopeDist.textContent = '';
+  }
+}
+function scopeAimTick(el){
+  const P = ctx.P.grp.position;
+  const fx = -Math.sin(ctx.G.camYaw), fz = -Math.cos(ctx.G.camYaw);
+  let hot = false, bestD = Infinity;
+  for(const b of M.bots){
+    if(!b.alive) continue;
+    const dx = b.grp.position.x - P.x, dz = b.grp.position.z - P.z;
+    const dist = Math.hypot(dx, dz);
+    if(dist < 0.5 || dist > SCOPE_MAXD) continue;
+    const dot = (dx * fx + dz * fz) / dist;
+    if(dot < Math.cos(SCOPE_CONE)) continue;
+    if(dist < bestD){ bestD = dist; hot = true; }
+  }
+  if(hot !== M.scopeHot){
+    M.scopeHot = hot;
+    if(el.mhScope) el.mhScope.classList.toggle('hot', hot);
+  }
+  if(el.scopeDist){
+    const txt = hot ? bn(Math.round(bestD)) + ' মি.' : '';
+    if(el.scopeDist.textContent !== txt) el.scopeDist.textContent = txt;
   }
 }
 
@@ -2026,8 +2113,8 @@ export function tickPlayer(dt){
     mx /= Math.max(1, len); mz /= Math.max(1, len);
     const sin = Math.sin(g.camYaw), cos = Math.cos(g.camYaw);
     const wx = mx*cos - mz*sin, wz = mx*sin + mz*cos;
-    P.grp.position.x += wx * P.speed * (1 - 0.48 * M.crouchK) * dt;
-    P.grp.position.z += wz * P.speed * (1 - 0.48 * M.crouchK) * dt;
+    P.grp.position.x += wx * P.speed * (1 - 0.48 * M.crouchK) * (1 - 0.45 * M.scopeK) * dt;
+    P.grp.position.z += wz * P.speed * (1 - 0.48 * M.crouchK) * (1 - 0.45 * M.scopeK) * dt;
     P.facing = Math.atan2(wx, wz);
     P.grp.rotation.y = P.facing + Math.PI;
     if(Math.floor(P.walkPhase) !== Math.floor(P.walkPhase + dt*9)) ctx.AU.sfx('step');
@@ -2091,7 +2178,11 @@ async function endMatch(won){
   if(!M || M.phase === 'over') return;
   M.phase = 'over';
   M.firing = false;
+  M.scopeOn = false; M.scopeK = 0; M.scopeHot = false;
   if(ctx.el.mhFire) ctx.el.mhFire.classList.remove('down');
+  if(ctx.el.mhZoom) ctx.el.mhZoom.classList.remove('active');
+  if(ctx.el.mhScope){ ctx.el.mhScope.classList.remove('show'); ctx.el.mhScope.classList.remove('hot'); }
+  if(ctx.el.scopeDist) ctx.el.scopeDist.textContent = '';
   const g = ctx.G;
   closePanel();
   ctx.hide(ctx.el.mhPrompt);

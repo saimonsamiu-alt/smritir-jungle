@@ -388,12 +388,50 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 .act-btn.active{ border-color:rgba(95,199,255,.85); color:#CFEAFF;
   background:rgba(46,120,180,.45); box-shadow:0 0 16px rgba(95,199,255,.4); }
 #mh-crouch{ position:absolute; right:0; bottom:calc(100% + 14px); width:52px; height:52px; font-size:22px; }
+#mh-zoom{ position:absolute; right:64px; bottom:calc(100% + 14px); width:52px; height:52px; font-size:22px; }
 #mh-fire{ width:86px; height:86px; font-size:40px; border-width:2px;
   border-color:rgba(255,216,150,.65);
   background:radial-gradient(circle at 34% 30%, #ffd08a, #ff7a2e 52%, #c9411a);
   box-shadow:0 6px 22px rgba(255,122,46,.45), inset 0 -6px 14px rgba(120,20,0,.4);
   transition:transform .08s; }
 #mh-fire.down{ transform:scale(.9); box-shadow:0 0 26px 6px rgba(255,150,60,.75); }
+
+/* ---------- কম্পাস-পটি (দিকের ফালকা) ---------- */
+#mh-compass{ position:absolute; left:50%; top:calc(64px + env(safe-area-inset-top));
+  transform:translateX(-50%); width:min(60vw,300px); z-index:24; pointer-events:none; }
+#mh-compass .cp-win{ position:relative; height:32px; overflow:hidden; border-radius:10px;
+  background:rgba(8,14,12,.55); border:1px solid var(--line); backdrop-filter:blur(8px);
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  mask-image:linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent); }
+#mh-compass .cp-move{ position:absolute; left:50%; top:0; height:100%; width:1080px; will-change:transform; }
+#mh-compass .cp-ticks{ position:absolute; inset:0;
+  background:repeating-linear-gradient(90deg, rgba(220,240,230,.15) 0 1px, transparent 1px 15px); }
+#mh-compass .cp-labels{ position:absolute; inset:0; display:flex; }
+#mh-compass .cp-labels b{ flex:0 0 45px; width:45px; display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:800; color:var(--txt); text-shadow:0 1px 2px #000; }
+#mh-compass .cp-labels b.card{ font-size:14.5px; color:var(--accent2); }
+#mh-compass .cp-mark{ position:absolute; left:50%; top:3px; bottom:3px; width:2px; transform:translateX(-50%);
+  background:linear-gradient(180deg, rgba(95,199,255,0), rgba(95,199,255,.95) 50%, rgba(95,199,255,0));
+  border-radius:2px; }
+#mh-compass .cp-num{ margin-top:3px; text-align:center; font-size:11px; font-weight:800;
+  color:var(--accent2); letter-spacing:.4px; text-shadow:0 1px 3px #000; opacity:.92; }
+
+/* ---------- স্কোপ — দূরের নিশানা ---------- */
+#mh-scope{ position:fixed; inset:0; pointer-events:none; visibility:hidden; opacity:0;
+  background:radial-gradient(circle at 50% 45%, rgba(2,8,6,0) 0 28vh, rgba(2,8,6,.42) 32vh,
+    rgba(2,8,6,.86) 39vh, rgba(2,8,6,.93) 100%); }
+#mh-scope.show{ visibility:visible; }
+#mh-scope .sc-ring{ position:absolute; left:50%; top:45%; width:57vh; height:57vh; transform:translate(-50%,-50%);
+  border-radius:50%; border:1.5px solid rgba(205,235,220,.22); box-shadow:inset 0 0 48px rgba(0,0,0,.62); }
+#mh-scope .sc-cross{ position:absolute; left:50%; top:45%; }
+#mh-scope .sc-cross i{ position:absolute; background:#EBF7EC; opacity:.92; box-shadow:0 0 4px rgba(0,0,0,.9); }
+#mh-scope .sc-cross i:nth-child(1){ left:-14px; top:-1px; width:28px; height:2px; }
+#mh-scope .sc-cross i:nth-child(2){ left:-1px; top:-14px; width:2px; height:28px; }
+#mh-scope .sc-cross i:nth-child(3){ left:-3px; top:-3px; width:6px; height:6px; border-radius:50%; background:#FF6A55; }
+#mh-scope.hot .sc-cross i:nth-child(1), #mh-scope.hot .sc-cross i:nth-child(2){ background:#FF5A45; }
+#mh-scope .sc-dist{ position:absolute; left:50%; top:calc(45% + 22px); transform:translateX(-50%);
+  font-size:13px; font-weight:800; color:#EBF7EC; text-shadow:0 1px 3px #000; white-space:nowrap; }
+#mh-scope.hot .sc-dist{ color:#FFB4A6; }
 
 /* ---------- মিনিম্যাপ (রাডার) ---------- */
 #mh-map{ position:fixed; left:12px; top:calc(80px + env(safe-area-inset-top));
@@ -507,6 +545,11 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 
 <!-- ======= বড় ম্যাচ HUD ======= -->
 <div id="match-hud" class="hidden">
+  <div id="mh-scope">
+    <div class="sc-ring"></div>
+    <div class="sc-cross"><i></i><i></i><i></i></div>
+    <div class="sc-dist" id="scope-dist"></div>
+  </div>
   <div id="mh-top">
     <div id="mh-left" class="hud-panel">
       <div id="hud-name-row"><b>তুমি</b><span>৯ জনে টিকে থাকো</span></div>
@@ -519,8 +562,23 @@ button{ font-family:inherit; cursor:pointer; border:none; }
       <button class="icon-btn" id="mh-pause">⏸</button>
     </div>
   </div>
+  <div id="mh-compass">
+    <div class="cp-win">
+      <div class="cp-move" id="mh-compass-move">
+        <div class="cp-ticks"></div>
+        <div class="cp-labels">
+          <b class="card">উ</b><b>উ-পূ</b><b class="card">পূ</b><b>দ-পূ</b><b class="card">দ</b><b>দ-প</b><b class="card">প</b><b>উ-প</b>
+          <b class="card">উ</b><b>উ-পূ</b><b class="card">পূ</b><b>দ-পূ</b><b class="card">দ</b><b>দ-প</b><b class="card">প</b><b>উ-প</b>
+          <b class="card">উ</b><b>উ-পূ</b><b class="card">পূ</b><b>দ-পূ</b><b class="card">দ</b><b>দ-প</b><b class="card">প</b><b>উ-প</b>
+        </div>
+      </div>
+      <div class="cp-mark"></div>
+    </div>
+    <div class="cp-num" id="mh-compass-num">০°</div>
+  </div>
   <div id="mh-inv"></div>
   <div id="mh-actions">
+    <button class="act-btn" id="mh-zoom" title="স্কোপ — দূরের নিশানা">🔭</button>
     <button class="act-btn" id="mh-crouch" title="নিচু হয়ে চলো">🧎</button>
     <button class="act-btn" id="mh-wall" title="গ্লু-প্রাচীর">🧱<span class="badge" id="mh-wall-n">০</span></button>
     <button class="act-btn" id="mh-bomb" title="বোমা">💣<span class="badge" id="mh-bomb-n">০</span></button>
