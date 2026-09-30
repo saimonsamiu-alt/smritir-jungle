@@ -22,6 +22,7 @@ const el = {
   tpName: $('tp-name'), tpLv: $('tp-lv'), tpXpTxt: $('tp-xp-txt'), tpXpFill: $('tp-xp-fill'),
   titlePlayer: $('title-player'),
   btnPlay: $('btn-play'), btnInstall: $('btn-install'), btnLogout: $('btn-logout'),
+  installGuide: $('screen-install'), btnInstallClose: $('btn-install-close'),
   liName: $('li-name'), liPass: $('li-pass'), liErr: $('li-err'), btnLogin: $('btn-login'), btnLoginBack: $('btn-login-back'),
   hud: $('hud'), hudName: $('hud-name'), hudLv: $('hud-lv'), hudHpFill: $('hud-hp-fill'), hudHpTxt: $('hud-hp-txt'),
   hudXpFill: $('hud-xp-fill'), hudCoins: $('hud-coins'), hudObjective: $('hud-objective'), hudHint: $('hud-hint'),
@@ -248,6 +249,13 @@ const G = {
 function levelFromXp(xp){ return Math.floor(xp / LEVEL_XP) + 1; }
 function xpProgress(xp){ return { lvl: levelFromXp(xp), cur: xp % LEVEL_XP }; }
 function bnNum(n){ return String(n).replace(/[0-9]/g, d => '০১২৩৪৫৬৭৮৯'[d]); }
+
+// iPhone/iPad-এ beforeinstallprompt ইভেন্ট নেই — ইনস্টল হয় Safari-র শেয়ার → «হোম স্ক্রিনে যোগ করুন» দিয়ে
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_STANDALONE = !!navigator.standalone
+  || matchMedia('(display-mode: standalone)').matches
+  || matchMedia('(display-mode: fullscreen)').matches;
 
 // ============================== SETTINGS ==============================
 const SETTINGS_KEY = 'smritir_jungle_settings';
@@ -2601,6 +2609,11 @@ addEventListener('resize', () => {
 });
 
 // ============================== AUTH & SCREENS ==============================
+// ইনস্টল-বাটন: Android/ডেস্কটপে beforeinstallprompt এলে, iPhone-এ সর্বদা (আগে ইনস্টল না থাকলে)
+function refreshInstallBtn(){
+  const visible = !IS_STANDALONE && (!!G.deferredInstall || IS_IOS);
+  el.btnInstall.classList.toggle('hidden', !visible);
+}
 function showTitle(){
   G.mode = 'title';
   hide(el.loading); hide(el.login); show(el.title);
@@ -2613,6 +2626,7 @@ function showTitle(){
   el.btnLogout.classList.toggle('hidden', !logged);
   el.btnShop.classList.toggle('hidden', !logged);
   refreshHud();
+  refreshInstallBtn();
 }
 
 // ---------- দোকানের পর্দা ----------
@@ -2864,18 +2878,32 @@ function bindScreens(){
     exitBattle();
   });
 
-  // install prompt
+  // ইনস্টল: Android/ডেস্কটপ = beforeinstallprompt; iPhone/iPad = ম্যানুয়াল নির্দেশ-প্যানেল (আইওএস-এ ইভেন্টটাই নেই)
+  refreshInstallBtn();
   addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
     G.deferredInstall = e;
-    el.btnInstall.classList.remove('hidden');
+    refreshInstallBtn();
+  });
+  addEventListener('appinstalled', () => {
+    G.deferredInstall = null;
+    refreshInstallBtn();
+    toast('📲 ইনস্টল সম্পন্ন — হোম স্ক্রিনের আইকন থেকে খোলো');
   });
   el.btnInstall.addEventListener('click', async () => {
-    if(!G.deferredInstall) return;
-    G.deferredInstall.prompt();
-    await G.deferredInstall.userChoice;
-    G.deferredInstall = null;
-    el.btnInstall.classList.add('hidden');
+    AU.sfx('click');
+    if(G.deferredInstall){
+      G.deferredInstall.prompt();
+      await G.deferredInstall.userChoice;
+      G.deferredInstall = null;
+      refreshInstallBtn();
+      return;
+    }
+    if(IS_IOS) show(el.installGuide);
+  });
+  el.btnInstallClose.addEventListener('click', () => {
+    AU.sfx('click');
+    hide(el.installGuide);
   });
 }
 

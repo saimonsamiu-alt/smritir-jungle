@@ -7,6 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="স্মৃতির জঙ্গল">
 <title>স্মৃতির জঙ্গল — পরীক্ষার খাতা 3D গেম</title>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
@@ -269,6 +270,26 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 
 .katex{ font-size:1.02em; }
 .install-row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+
+/* ---------- iPhone ইনস্টল-নির্দেশ ---------- */
+#screen-install{ overflow-y:auto; justify-content:flex-start; padding:calc(12px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom)); }
+#screen-install .pause-card{ margin:auto 0; }
+.inst-steps{ display:flex; flex-direction:column; gap:10px; }
+.inst-step{ display:flex; gap:11px; align-items:flex-start; background:rgba(255,255,255,.04);
+  border:1px solid var(--line); border-radius:14px; padding:11px 13px; text-align:left; }
+.inst-num{ flex:0 0 26px; height:26px; border-radius:50%; background:rgba(255,196,107,.16); color:var(--accent2);
+  font-weight:800; font-size:14px; display:flex; align-items:center; justify-content:center; }
+.inst-txt{ font-size:13.5px; line-height:1.7; color:var(--txt); }
+.inst-txt b{ color:var(--accent2); }
+.share-ico{ display:inline-block; vertical-align:-3px; margin:0 2px; }
+/* আইফোন আড়াআড়িতে (কম উচ্চতা) ৩ ধাপ পাশাপাশি — কিছুই কাটা পড়ে না */
+@media (orientation:landscape) and (max-height:520px){
+  #screen-install .pause-card{ padding:14px 18px; gap:8px; width:min(760px,94vw); }
+  #screen-install .pause-card h2{ font-size:17px; margin-bottom:2px; }
+  #screen-install .inst-steps{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  #screen-install .inst-step{ flex-direction:column; gap:6px; padding:9px 10px; }
+  #screen-install .inst-txt{ font-size:12px; line-height:1.5; }
+}
 
 /* ---------- দোকান ---------- */
 #screen-shop{ justify-content:flex-start; gap:12px; padding:calc(16px + env(safe-area-inset-top)) 16px 24px; overflow-y:auto; }
@@ -689,6 +710,32 @@ button{ font-family:inherit; cursor:pointer; border:none; }
     </div>
     <button class="btn ghost" id="set-sound">🔊 সাউন্ড: চালু</button>
     <button class="btn" id="btn-settings-close" style="width:100%">ফিরে যাও</button>
+  </div>
+</div>
+
+<!-- ======= iPhone ইনস্টল নির্দেশ ======= -->
+<div id="screen-install" class="screen scrim hidden">
+  <div class="pause-card">
+    <h2>📲 আইফোনে ইনস্টল</h2>
+    <div class="inst-txt" style="color:var(--dim);font-size:13px">আইফোনে অ্যাপের মতো — অ্যাড্রেস-বার ছাড়া ফুল-স্ক্রিনে খেলতে হোম স্ক্রিনে যোগ করো। একবার করলেই হবে।</div>
+    <div class="inst-steps">
+      <div class="inst-step">
+        <div class="inst-num">১</div>
+        <div class="inst-txt">Safari-র <b>নিচের মাঝখানে</b> শেয়ার বাটনে
+          <svg class="share-ico" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#FFC46B" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 6.5 12 3l4 3.5"/><path d="M5.5 11.5V19a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-7.5"/></svg>
+          চাপো (বর্গের ভিতর তীর-উঠা আইকন)</div>
+      </div>
+      <div class="inst-step">
+        <div class="inst-num">২</div>
+        <div class="inst-txt">নিচে আসা তালিকা থেকে <b>«হোম স্ক্রিনে যোগ করুন»</b> (Add to Home Screen) বেছে নাও</div>
+      </div>
+      <div class="inst-step">
+        <div class="inst-num">৩</div>
+        <div class="inst-txt">ডান-উপরে <b>«যোগ করুন»</b> চাপো — ব্যস, হোম স্ক্রিনে খেলার আইকন বসে যাবে</div>
+      </div>
+    </div>
+    <div class="inst-txt" style="color:var(--dim);font-size:12.5px">iPad-এও এই একই তিন ধাপ। Android বা কম্পিউটারে বাটনটি নিজেই ইনস্টল শুরু করে দেয়।</div>
+    <button class="btn" id="btn-install-close" style="width:100%">বুঝেছি</button>
   </div>
 </div>
 
