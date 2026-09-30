@@ -28,6 +28,9 @@ const el = {
   bTimer: $('battle-timer'), trFg: $('tr-fg'), bTimerNum: $('battle-timer-num'),
   qPanel: $('q-panel'), qText: $('q-text'), qAngel: $('q-angel'), qOpts: $('q-opts'),
   pause: $('screen-pause'), btnResume: $('btn-resume'), btnSound: $('btn-sound'), btnQuit: $('btn-quit'),
+  settings: $('screen-settings'), btnSettingsClose: $('btn-settings-close'),
+  btnPauseSettings: $('btn-pause-settings'), btnTitleSettings: $('btn-title-settings'),
+  setQuality: $('set-quality'), setSens: $('set-sens'), setSensNum: $('set-sens-num'), setSound: $('set-sound'),
   victory: $('screen-victory'), vTitle: $('v-title'), vSub: $('v-sub'), vXp: $('v-xp'), vCoins: $('v-coins'),
   vAcc: $('v-acc'), vTotalXp: $('v-total-xp'), vLevel: $('v-level'), btnVCont: $('btn-v-continue'),
   defeat: $('screen-defeat'), dSub: $('d-sub'), dStat: $('d-stat'), btnDRetry: $('btn-d-retry'), btnDLeave: $('btn-d-leave'),
@@ -241,6 +244,62 @@ const G = {
 function levelFromXp(xp){ return Math.floor(xp / LEVEL_XP) + 1; }
 function xpProgress(xp){ return { lvl: levelFromXp(xp), cur: xp % LEVEL_XP }; }
 function bnNum(n){ return String(n).replace(/[0-9]/g, d => '০১২৩৪৫৬৭৮৯'[d]); }
+
+// ============================== SETTINGS ==============================
+const SETTINGS_KEY = 'smritir_jungle_settings';
+function defaultSettings(){ return { quality: 'high', sens: 1, sound: true }; }
+function loadSettings(){
+  try{ const raw = localStorage.getItem(SETTINGS_KEY); if(raw) return { ...defaultSettings(), ...JSON.parse(raw) }; }catch(e){}
+  return defaultSettings();
+}
+function saveSettings(){ try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(G.settings)); }catch(e){} }
+G.settings = loadSettings();
+AU.enabled = G.settings.sound;
+
+function qualityPixelRatio(){
+  const dpr = devicePixelRatio || 1;
+  if(G.settings.quality === 'low') return 1;
+  if(G.settings.quality === 'mid') return Math.min(dpr, 1.15);
+  return Math.min(dpr, 1.75);
+}
+function applyQuality(){
+  if(!renderer || !sunLight) return;
+  renderer.setPixelRatio(qualityPixelRatio());
+  const shadows = G.settings.quality !== 'low';
+  renderer.shadowMap.enabled = shadows;
+  sunLight.castShadow = shadows;
+  const size = G.settings.quality === 'high' ? 2048 : 1024;
+  if(sunLight.shadow.mapSize.x !== size){
+    sunLight.shadow.mapSize.set(size, size);
+    if(sunLight.shadow.map){ sunLight.shadow.map.dispose(); sunLight.shadow.map = null; }
+  }
+  scene.traverse(o => {
+    if(o.material){ (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.needsUpdate = true); }
+  });
+}
+function sensText(v){ return bnNum(Number(v).toFixed(1)) + 'x'; }
+function refreshSettingsUI(){
+  if(!el.setQuality) return;
+  for(const b of el.setQuality.querySelectorAll('button')) b.classList.toggle('on', b.dataset.q === G.settings.quality);
+  el.setSens.value = G.settings.sens;
+  el.setSensNum.textContent = sensText(G.settings.sens);
+  const label = G.settings.sound ? '🔊 সাউন্ড: চালু' : '🔇 সাউন্ড: বন্ধ';
+  el.setSound.textContent = label;
+  if(el.btnSound) el.btnSound.textContent = label;
+}
+function setQuality(q){
+  if(!['high','mid','low'].includes(q) || G.settings.quality === q) return;
+  G.settings.quality = q; saveSettings(); applyQuality(); refreshSettingsUI(); AU.sfx('click');
+}
+function setSensitivity(v){
+  G.settings.sens = Math.round(Math.min(2, Math.max(0.5, v)) * 10) / 10;
+  saveSettings(); el.setSensNum.textContent = sensText(G.settings.sens);
+}
+function setSound(on){
+  G.settings.sound = !!on; AU.setEnabled(G.settings.sound); saveSettings(); refreshSettingsUI();
+}
+function openSettings(){ if(!el.settings) return; refreshSettingsUI(); show(el.settings); }
+function closeSettings(){ if(el.settings) hide(el.settings); }
 
 // Each HSC subject earns its own currency, so a student cannot farm Physics
 // and spend it on Chemistry — every subject has to be practised on its own.
@@ -2131,7 +2190,8 @@ function bindInput(){
       if(btn) answerReview(Number(e.key)-1, btn);
     }
     if(MATCH.answering() && ['1','2','3','4'].includes(e.key)) MATCH.answerKey(Number(e.key)-1);
-    if(e.key === 'Escape' && (G.mode === 'world' || G.mode === 'battle' || G.mode.startsWith('match'))) togglePause(true);
+    if(e.key === 'Escape' && !el.settings.classList.contains('hidden')) closeSettings();
+    else if(e.key === 'Escape' && (G.mode === 'world' || G.mode === 'battle' || G.mode.startsWith('match'))) togglePause(true);
     if(e.key === 'Enter' && G.mode === 'match_live' && !MATCH.answering()) MATCH.usePrompt();
     if(e.key === ' ' && G.mode === 'match_plane') MATCH.jumpNow();
     if((e.key === ' ' || e.key.toLowerCase() === 'f') && G.mode === 'match_live' && !MATCH.answering()) MATCH.setFiring(true);
@@ -2173,7 +2233,7 @@ function bindInput(){
     for(const t of e.changedTouches){
       if(t.identifier === joyId) joyMove(t.clientX, t.clientY);
       else if(t.identifier === camId){
-        const zs = 1 - 0.62 * MATCH.zoomK();
+        const zs = (1 - 0.62 * MATCH.zoomK()) * G.settings.sens;
         G.camYaw -= (t.clientX - camLast.x) * 0.006 * zs;
         G.camPitch = Math.min(0.9, Math.max(0.05, G.camPitch + (t.clientY - camLast.y) * 0.004 * zs));
         camLast = {x: t.clientX, y: t.clientY};
@@ -2193,7 +2253,7 @@ function bindInput(){
   canvas.addEventListener('mousedown', e => { mouseDown = true; camLast = {x: e.clientX, y: e.clientY}; });
   addEventListener('mousemove', e => {
     if(!mouseDown) return;
-    const zs = 1 - 0.62 * MATCH.zoomK();
+    const zs = (1 - 0.62 * MATCH.zoomK()) * G.settings.sens;
     G.camYaw -= (e.clientX - camLast.x) * 0.005 * zs;
     G.camPitch = Math.min(0.9, Math.max(0.05, G.camPitch + (e.clientY - camLast.y) * 0.0035 * zs));
     camLast = {x: e.clientX, y: e.clientY};
@@ -2206,10 +2266,16 @@ function bindInput(){
   el.btnPause.addEventListener('click', () => togglePause(true));
   el.hudMatch.addEventListener('click', () => { if(G.mode === 'world') startMatchFlow(); });
   el.btnResume.addEventListener('click', () => togglePause(false));
-  el.btnSound.addEventListener('click', () => {
-    AU.setEnabled(!AU.enabled);
-    el.btnSound.textContent = AU.enabled ? '🔊 সাউন্ড: চালু' : '🔇 সাউন্ড: বন্ধ';
+  el.btnSound.addEventListener('click', () => setSound(!G.settings.sound));
+  el.btnPauseSettings.addEventListener('click', () => { AU.sfx('click'); openSettings(); });
+  el.btnTitleSettings.addEventListener('click', () => { AU.init(); AU.resume(); AU.sfx('click'); openSettings(); });
+  el.btnSettingsClose.addEventListener('click', () => { AU.sfx('click'); closeSettings(); });
+  el.setQuality.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if(b) setQuality(b.dataset.q);
   });
+  el.setSens.addEventListener('input', () => setSensitivity(parseFloat(el.setSens.value)));
+  el.setSound.addEventListener('click', () => setSound(!G.settings.sound));
   el.btnQuit.addEventListener('click', () => {
     togglePause(false);
     if(REVIEW.active){ closeReview(); return; }
@@ -2391,7 +2457,7 @@ function loop(){
 async function initThree(){
   setLoad(8, '৩ডি ইঞ্জিন চালু হচ্ছে…');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.75));
+  renderer.setPixelRatio(qualityPixelRatio());
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -2416,6 +2482,7 @@ async function initThree(){
   sunLight.shadow.camera.far = 160;
   sunLight.shadow.bias = -0.0008;
   scene.add(sunLight); scene.add(sunLight.target);
+  applyQuality();
 
   setLoad(16, 'জঙ্গলের গাছপালা আনা হচ্ছে…');
   await loadModels();

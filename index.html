@@ -246,6 +246,18 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   padding:26px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:12px; }
 .pause-card h2{ text-align:center; margin-bottom:6px; }
 
+/* ---------- সেটিংস ---------- */
+.set-sec{ display:flex; flex-direction:column; gap:8px; }
+.set-label{ font-size:14px; font-weight:700; color:var(--txt); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.set-label b{ color:var(--teal); font-size:15px; }
+.set-hint{ font-size:12px; color:var(--dim); line-height:1.55; }
+.set-seg{ display:flex; gap:8px; }
+.set-seg button{ flex:1; padding:11px 0; border-radius:14px; background:var(--panel); border:1px solid var(--line);
+  color:var(--txt); font:inherit; font-size:15px; font-weight:600; cursor:pointer; transition:transform .12s; }
+.set-seg button:active{ transform:scale(.96); }
+.set-seg button.on{ background:rgba(62,198,184,.18); border-color:var(--teal); color:var(--teal); }
+#set-sens{ width:100%; height:34px; accent-color:var(--teal); }
+
 #offline-badge{ position:fixed; z-index:50; top:calc(6px + env(safe-area-inset-top)); left:50%;
   transform:translateX(-50%); font-size:11px; color:#FFD9AE; background:rgba(232,68,46,.25);
   border:1px solid rgba(232,68,46,.5); padding:4px 12px; border-radius:99px; display:none; }
@@ -477,6 +489,7 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   <button class="btn" id="btn-match" style="min-width:min(300px,80vw)">🪂 &nbsp;বড় ম্যাচ (ব্যাটল রয়্যাল)</button>
   <button class="btn ghost" id="btn-play" style="min-width:min(300px,80vw)">🌴 &nbsp;জগৎ-যুদ্ধ (গল্প)</button>
   <div class="install-row">
+    <button class="btn ghost small" id="btn-title-settings">⚙️ &nbsp;সেটিংস</button>
     <button class="btn ghost small hidden" id="btn-shop">🛍️ &nbsp;দোকান ও জিনিসপত্র</button>
     <button class="btn ghost small hidden" id="btn-install">📲 হোম স্ক্রিনে ইনস্টল</button>
     <button class="btn ghost small hidden" id="btn-logout">লগআউট</button>
@@ -629,8 +642,32 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   <div class="pause-card">
     <h2>⏸ বিরতি</h2>
     <button class="btn" id="btn-resume">চালিয়ে যাও</button>
+    <button class="btn ghost" id="btn-pause-settings">⚙️ সেটিংস</button>
     <button class="btn ghost" id="btn-sound">🔊 সাউন্ড: চালু</button>
     <button class="btn danger" id="btn-quit">মিশন ছেড়ে বের হও</button>
+  </div>
+</div>
+
+<!-- ======= SETTINGS ======= -->
+<div id="screen-settings" class="screen scrim hidden">
+  <div class="pause-card">
+    <h2>⚙️ সেটিংস</h2>
+    <div class="set-sec">
+      <div class="set-label">গ্রাফিক্স কোয়ালিটি</div>
+      <div class="set-seg" id="set-quality">
+        <button data-q="high">উচ্চ</button>
+        <button data-q="mid">মধ্যম</button>
+        <button data-q="low">নিম্ন</button>
+      </div>
+      <div class="set-hint">পুরোনো বা কম-দামি ফোনে «নিম্ন» সবচেয়ে মসৃণ চলে।</div>
+    </div>
+    <div class="set-sec">
+      <div class="set-label">ক্যামেরার সংবেদনশীলতা <b id="set-sens-num">১.০x</b></div>
+      <input type="range" id="set-sens" min="0.5" max="2" step="0.1" value="1">
+      <div class="set-hint">বাঁয়ে কম — আঙুল সরালে ধীরে ঘোরে; ডানে বেশি — দ্রুত ঘোরে।</div>
+    </div>
+    <button class="btn ghost" id="set-sound">🔊 সাউন্ড: চালু</button>
+    <button class="btn" id="btn-settings-close" style="width:100%">ফিরে যাও</button>
   </div>
 </div>
 
