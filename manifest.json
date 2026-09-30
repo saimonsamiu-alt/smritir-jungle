@@ -9,7 +9,7 @@
   "display": "fullscreen",
   "background_color": "#070D0B",
   "theme_color": "#070D0B",
-  "orientation": "any",
+  "orientation": "landscape",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

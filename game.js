@@ -2221,12 +2221,33 @@ function exitToAfterMatch(){
   if(G.world){ G.mode = 'world'; show(el.hud); setObjective(objectiveText()); }
   else showTitle();
 }
+// ---------- আড়াআড়ি পূর্ণ-পর্দা (ফ্রি-ফায়ার-ধাঁচ) ----------
+function enterImmersive(){
+  const de = document.documentElement;
+  const lock = () => {
+    try{
+      if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    }catch(e){}
+  };
+  try{
+    const req = de.requestFullscreen || de.webkitRequestFullscreen;
+    if(!document.fullscreenElement && !document.webkitFullscreenElement && req){
+      const p = req.call(de, { navigationUI: 'hide' });
+      if(p && p.then) p.then(lock).catch(() => {});
+      else lock();
+    } else {
+      lock();
+    }
+  }catch(e){}
+}
+
 function startMatchFlow(){
   if(!G.student || !G.progress){
     toast('আগে টিউশন অ্যাকাউন্টে লগইন করো — ম্যাচের XP সেভ হবে না!');
     show(el.login); hide(el.title);
     return;
   }
+  enterImmersive();
   AU.init(); AU.resume(); AU.sfx('click');
   hide(el.title);
   MATCH.startMatch();
@@ -2782,7 +2803,7 @@ async function startPlay(){
 }
 
 function bindScreens(){
-  el.btnPlay.addEventListener('click', () => { AU.init(); AU.resume(); AU.sfx('click'); openWorlds(); });
+  el.btnPlay.addEventListener('click', () => { enterImmersive(); AU.init(); AU.resume(); AU.sfx('click'); openWorlds(); });
   el.btnMatch.addEventListener('click', startMatchFlow);
   el.btnWorldsClose.addEventListener('click', closeWorlds);
   el.worldsGrid.addEventListener('click', e => {
@@ -2827,6 +2848,7 @@ function bindScreens(){
     AU.sfx('click');
     if(MATCH.isActive()){
       hide(el.defeat);
+      enterImmersive();
       MATCH.exitMatch();
       MATCH.startMatch();
       return;

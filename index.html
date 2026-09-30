@@ -318,7 +318,8 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 
 /* ---------- বড় ম্যাচ (BR) ---------- */
 #match-hud{ position:fixed; inset:0; z-index:23; pointer-events:none; }
-#mh-top{ position:absolute; top:calc(8px + env(safe-area-inset-top)); left:10px; right:10px;
+#mh-top{ position:absolute; top:calc(8px + env(safe-area-inset-top));
+  left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right));
   display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
 .mh-chips{ display:flex; gap:8px; align-items:center; pointer-events:auto; }
 .mh-chip{ background:linear-gradient(180deg, rgba(46,66,58,.9), rgba(16,26,22,.92));
@@ -327,13 +328,13 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   box-shadow:0 6px 16px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.1);
   backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
 .mh-chip.danger{ color:#FFB4A6; border-color:rgba(232,68,46,.55); background:rgba(232,68,46,.2); }
-#mh-inv{ position:absolute; left:12px; bottom:calc(58px + env(safe-area-inset-bottom));
+#mh-inv{ position:absolute; left:calc(12px + env(safe-area-inset-left)); bottom:calc(58px + env(safe-area-inset-bottom));
   display:flex; gap:8px; flex-wrap:wrap; max-width:62vw; pointer-events:auto; }
 #mh-inv .chip{ background:var(--panel); border:1px solid var(--line); border-radius:12px;
   padding:8px 11px; font-size:12.5px; font-weight:700; color:var(--txt); box-shadow:var(--shadow); }
 #mh-inv .chip.use{ color:var(--green); border-color:rgba(76,217,123,.5); animation:use-pulse 1.2s infinite; }
 @keyframes use-pulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(76,217,123,.45); } 50%{ box-shadow:0 0 14px 2px rgba(76,217,123,.35); } }
-#kill-feed{ position:fixed; right:10px; top:calc(148px + env(safe-area-inset-top)); z-index:23;
+#kill-feed{ position:fixed; right:calc(10px + env(safe-area-inset-right)); top:calc(148px + env(safe-area-inset-top)); z-index:23;
   display:flex; flex-direction:column; gap:6px; align-items:flex-end; pointer-events:none; max-width:72vw; }
 .feed-item{ background:rgba(8,14,12,.82); border:1px solid var(--line); border-radius:12px;
   padding:7px 12px; font-size:12.5px; font-weight:600; color:var(--txt);
@@ -392,7 +393,7 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 #q-close:active{ transform:scale(.94); }
 
 /* অ্যাকশন বাটন — ফায়ার / প্রাচীর / বোমা */
-#mh-actions{ position:absolute; right:14px; bottom:calc(34px + env(safe-area-inset-bottom));
+#mh-actions{ position:absolute; right:calc(14px + env(safe-area-inset-right)); bottom:calc(34px + env(safe-area-inset-bottom));
   display:flex; align-items:flex-end; gap:12px; pointer-events:auto; }
 .act-btn{ width:58px; height:58px; border-radius:50%; border:1px solid var(--line);
   background:linear-gradient(180deg, rgba(52,74,64,.9), rgba(14,24,20,.92)); color:var(--txt); font-size:24px; line-height:1;
@@ -456,10 +457,20 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 #mh-scope.hot .sc-dist{ color:#FFB4A6; }
 
 /* ---------- মিনিম্যাপ (রাডার) ---------- */
-#mh-map{ position:fixed; left:12px; top:calc(80px + env(safe-area-inset-top));
+#mh-map{ position:fixed; left:calc(12px + env(safe-area-inset-left)); top:calc(80px + env(safe-area-inset-top));
   width:116px; height:116px; border-radius:50%; z-index:24; pointer-events:none;
   background:rgba(8,14,12,.55); border:2px solid rgba(255,255,255,.22);
   box-shadow:var(--shadow); }
+
+/* আড়াআড়ি গেট — ফোন খাড়া থাকলে দেখানো হয় (ফ্রি-ফায়ার-ধাঁচ) */
+#rotate-gate{ position:fixed; inset:0; z-index:200; display:none; flex-direction:column;
+  align-items:center; justify-content:center; gap:12px; text-align:center; padding:26px;
+  background:linear-gradient(180deg,#07110D,#0B1A14 55%,#08120E); }
+#rotate-gate .rg-phone{ font-size:58px; line-height:1; animation:rg-tilt 2s cubic-bezier(.5,.05,.4,.95) infinite; }
+@keyframes rg-tilt{ 0%,16%{ transform:rotate(0deg); } 44%,66%{ transform:rotate(90deg) translateY(-8px); } 94%,100%{ transform:rotate(0deg); } }
+#rotate-gate .rg-title{ font-size:clamp(21px,5.6vw,32px); font-weight:900; color:var(--txt); }
+#rotate-gate .rg-sub{ font-size:13.5px; line-height:1.75; color:var(--dim); max-width:430px; }
+@media (orientation: portrait){ #rotate-gate{ display:flex; } }
 </style>
 </head>
 <body>
@@ -713,6 +724,13 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 <div id="toast"></div>
 <div id="subtitle"></div>
 <div id="fade-black"></div>
+
+<!-- ======= আড়াআড়ি গেট — ফোন খাড়া থাকলে দেখানো হয় ======= -->
+<div id="rotate-gate" aria-hidden="true">
+  <div class="rg-phone">📱</div>
+  <div class="rg-title">ফোনটি আড়াআড়ি ধরো</div>
+  <div class="rg-sub">স্মৃতির জঙ্গল আড়াআড়ি পর্দার খেলা — ফোন ঘুরিয়ে ধরলেই খেলা চলবে</div>
+</div>
 
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
