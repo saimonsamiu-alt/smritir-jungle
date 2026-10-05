@@ -12,6 +12,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import * as MATCH from './match.js';
+import * as NET from './net.js';
 
 // ============================== DOM ==============================
 const $ = id => document.getElementById(id);
@@ -41,7 +42,8 @@ const el = {
   defeat: $('screen-defeat'), dSub: $('d-sub'), dStat: $('d-stat'), btnDRetry: $('btn-d-retry'), btnDLeave: $('btn-d-leave'),
   toast: $('toast'), subtitle: $('subtitle'), fade: $('fade-black'),
   dmgFlash: $('damage-flash'), healFlash: $('heal-flash'), offline: $('offline-badge'),
-  btnMatch: $('btn-match'), matchHud: $('match-hud'), mhAlive: $('mh-alive'), mhKills: $('mh-kills'),
+  btnMatch: $('btn-match'), btnFriendMatch: $('btn-friend-match'),
+  matchHud: $('match-hud'), mhAlive: $('mh-alive'), mhKills: $('mh-kills'),
   mhZone: $('mh-zone'), mhPause: $('mh-pause'), mhHpFill: $('mh-hp-fill'), mhHpNum: $('mh-hp-num'),
   mhInv: $('mh-inv'), mhPrompt: $('mh-prompt'), killFeed: $('kill-feed'), dropBtn: $('drop-btn'),
   mhFire: $('mh-fire'), mhWall: $('mh-wall'), mhBomb: $('mh-bomb'), mhCrouch: $('mh-crouch'),
@@ -2249,7 +2251,7 @@ function enterImmersive(){
   }catch(e){}
 }
 
-function startMatchFlow(){
+function startMatchFlow(roster){
   if(!G.student || !G.progress){
     toast('আগে টিউশন অ্যাকাউন্টে লগইন করো — ম্যাচের XP সেভ হবে না!');
     show(el.login); hide(el.title);
@@ -2258,7 +2260,34 @@ function startMatchFlow(){
   enterImmersive();
   AU.init(); AU.resume(); AU.sfx('click');
   hide(el.title);
-  MATCH.startMatch();
+  MATCH.startMatch(roster);
+}
+
+// ---------- বন্ধুদের সাথে এক ম্যাচ (ঘর-কোড ধরে) ----------
+function exitFriendLobby(){
+  NET.detachMatch();
+  NET.leaveRoom();
+  show(el.title);
+}
+
+function openFriendMatch(){
+  if(!G.student || !G.progress){
+    toast('আগে টিউশন অ্যাকাউন্টে লগইন করো — ম্যাচের XP সেভ হবে না!');
+    show(el.login); hide(el.title);
+    return;
+  }
+  if(!NET.enabled()){ startMatchFlow(); return; }   // নেট বন্ধ — একা ম্যাচই চলুক
+  enterImmersive();
+  AU.init(); AU.resume(); AU.sfx('click');
+  hide(el.title);
+  // হ্যান্ডলার আগে বসাতে হয় — নয়তো হোস্টের "শুরু" ডাক শুনে ম্যাচ নামতেই পারে না
+  NET.attachMatch(Object.assign(MATCH.netHandler(), {
+    onStart: roster => { NET.closeLobby(); MATCH.startMatch(roster); },
+  }));
+  NET.openLobby({
+    onCancel: exitFriendLobby,
+    onCountdown: () => toast('🚀 ম্যাচ শুরু হচ্ছে — প্রস্তুত হও!', 1400),
+  });
 }
 
 // ============================== INPUT ==============================
@@ -2274,7 +2303,8 @@ function bindInput(){
       if(btn) answerReview(Number(e.key)-1, btn);
     }
     if(MATCH.answering() && ['1','2','3','4'].includes(e.key)) MATCH.answerKey(Number(e.key)-1);
-    if(e.key === 'Escape' && !el.settings.classList.contains('hidden')) closeSettings();
+    if(e.key === 'Escape' && NET.lobbyOpen()) exitFriendLobby();
+    else if(e.key === 'Escape' && !el.settings.classList.contains('hidden')) closeSettings();
     else if(e.key === 'Escape' && (G.mode === 'world' || G.mode === 'battle' || G.mode.startsWith('match'))) togglePause(true);
     if(e.key === 'Enter' && G.mode === 'match_live' && !MATCH.answering()) MATCH.usePrompt();
     if(e.key === ' ' && G.mode === 'match_plane') MATCH.jumpNow();
@@ -2622,6 +2652,7 @@ function showTitle(){
   el.btnPlay.textContent = logged ? '🌴  জগৎ-যুদ্ধ (গল্প)' : '🔑  অ্যাকাউন্টে প্রবেশ করো';
   el.btnMatch.textContent = logged ? '🪂  বড় ম্যাচ (ব্যাটল রয়্যাল)' : '🔑  অ্যাকাউন্টে প্রবেশ করো';
   el.btnMatch.classList.toggle('ghost', !logged);
+  el.btnFriendMatch.classList.toggle('hidden', !logged || !NET.enabled());
   el.btnPlay.classList.toggle('ghost', logged);
   el.btnLogout.classList.toggle('hidden', !logged);
   el.btnShop.classList.toggle('hidden', !logged);
@@ -2819,6 +2850,7 @@ async function startPlay(){
 function bindScreens(){
   el.btnPlay.addEventListener('click', () => { enterImmersive(); AU.init(); AU.resume(); AU.sfx('click'); openWorlds(); });
   el.btnMatch.addEventListener('click', startMatchFlow);
+  el.btnFriendMatch.addEventListener('click', openFriendMatch);
   el.btnWorldsClose.addEventListener('click', closeWorlds);
   el.worldsGrid.addEventListener('click', e => {
     const b = e.target.closest('[data-world]');
@@ -2864,6 +2896,7 @@ function bindScreens(){
       hide(el.defeat);
       enterImmersive();
       MATCH.exitMatch();
+      if(NET.enabled()){ openFriendMatch(); return; }
       MATCH.startMatch();
       return;
     }

@@ -10,6 +10,7 @@
 // যাচাই করে); নেট না থাকলে ফলের ভেতরের প্রশ্ন-ভান্ডার চলে।
 // ============================================================
 import * as THREE from 'three';
+import * as NET from './net.js';
 
 let ctx = null;
 export function initMatch(c){ ctx = c; }
@@ -422,7 +423,7 @@ function buildZone(){
     t:ZONE_STAGES[0].w, from:null, to:null };
 }
 
-function buildBot(i){
+function buildBot(i, total){
   const scene = ctx.scene();
   const root = new THREE.Group();
   const color = BOT_COLORS[i % BOT_COLORS.length];
@@ -465,7 +466,7 @@ function buildBot(i){
   const chute = buildChute(color, 1.5);
   M.bots.push({ name: BOT_NAMES[i], grp: root, body, head, helmet, gun, legL, legR, pack, chute,
     color, state:'plane',
-    jumpAt: (i / Math.max(1, BOT_NAMES.length - 1)) * 10.5 + rand(0.5, 2.5), // প্লেনের পুরোটা জুড়ে যার যার সময়ে লাফ
+    jumpAt: (i / Math.max(1, (total || BOT_NAMES.length) - 1)) * 10.5 + rand(0.5, 2.5), // প্লেনের পুরোটা জুড়ে যার যার সময়ে লাফ
     land: { x:lx, z:lz },
     activeAt: 0, landedAt: 0, chuteT: 0,
     hp: 100, alive: true, deadT: 0, target: null, provokedT: 0,
@@ -475,7 +476,91 @@ function buildBot(i){
     roamT: 0, roamTo: v3(lx, 0, lz), walkPhase: Math.random()*6 });
 }
 
-function buildBots(){ for(let i = 0; i < BOT_NAMES.length; i++) buildBot(i); }
+// বট-সংখ্যা: মোট ২০ জনের ঘর — যতজন আসল বন্ধু, ততজন কম বট
+function buildBots(skip){
+  const n = Math.max(0, BOT_NAMES.length - (skip || 0));
+  for(let i = 0; i < n; i++) buildBot(i, n);
+}
+
+// ---------- আসল বন্ধুর চরিত্র (নীল রঙ + নাম-ফলক) ----------
+function nameTagSprite(name){
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 72;
+  const c = cv.getContext('2d');
+  const txt = String(name || 'যোদ্ধা').slice(0, 14);
+  c.font = 'bold 30px "Noto Sans Bengali", "Hind Siliguri", sans-serif';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  const w = Math.min(236, c.measureText(txt).width + 30);
+  const x0 = 128 - w / 2, y0 = 12, h = 48, r = 13;
+  c.fillStyle = 'rgba(8,20,30,.66)';
+  c.beginPath();
+  c.moveTo(x0 + r, y0);
+  c.lineTo(x0 + w - r, y0); c.quadraticCurveTo(x0 + w, y0, x0 + w, y0 + r);
+  c.lineTo(x0 + w, y0 + h - r); c.quadraticCurveTo(x0 + w, y0 + h, x0 + w - r, y0 + h);
+  c.lineTo(x0 + r, y0 + h); c.quadraticCurveTo(x0, y0 + h, x0, y0 + h - r);
+  c.lineTo(x0, y0 + r); c.quadraticCurveTo(x0, y0, x0 + r, y0);
+  c.closePath(); c.fill();
+  c.fillStyle = '#9FD8FF';
+  c.fillText(txt, 128, 37);
+  const tx = new THREE.CanvasTexture(cv);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: true }));
+  sp.scale.set(2.35, 0.66, 1);
+  return sp;
+}
+
+function buildRemote(r){
+  const scene = ctx.scene();
+  const root = new THREE.Group();
+  const color = 0x4EA8FF;   // আসল খেলোয়াড় — আকাশি নীল
+  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.55 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.7 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.75, 6, 10), bodyMat);
+  body.position.y = 1.0; body.castShadow = true; root.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0xd9a878, roughness: 0.7 }));
+  head.position.y = 1.72; root.add(head);
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 6, 0, Math.PI*2, 0, Math.PI/2), bodyMat);
+  helmet.position.y = 1.74; root.add(helmet);
+  let gun = ctx.buildBotGun(2, 1);
+  if(!gun){
+    gun = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.11, 0.68), darkMat);
+    gun.position.set(0.3, 1.15, 0.32);
+  }
+  root.add(gun);
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, 0.16), darkMat);
+  legL.position.set(-0.14, 0.28, 0); root.add(legL);
+  const legR = legL.clone(); legR.position.x = 0.14; root.add(legR);
+  const pack = ctx.buildGearModel('pack', 0.5);
+  if(pack){ pack.position.set(0, 1.08, 0.34); pack.rotation.y = Math.PI; root.add(pack); }
+  const tag = nameTagSprite(r.name);
+  tag.position.y = 2.3; root.add(tag);
+  root.visible = false;               // প্লেন-পর্বে কেউ দেখা যায় না
+  scene.add(root);
+  const chute = buildChute(color, 1.5);
+  if(chute) chute.visible = false;
+  M.remotes.push({
+    net: true, sid: r.sid, name: r.name, lv: r.lv,
+    grp: root, chute, tag, parts: { body, head, helmet, legL, legR },
+    x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, try_: 0,
+    has: false, st: 0, alive: true, gone: false, deadT: 0,
+  });
+}
+
+function normRoster(roster){
+  const out = [];
+  const me = NET.mySid();
+  for(const r of (roster || [])){
+    const arr = Array.isArray(r) ? r : [r && r.sid, r && r.name, r && r.lv];
+    const sid = String(arr[0] || '');
+    if(!sid || sid === me) continue;
+    if(out.some(x => x.sid === sid)) continue;
+    out.push({ sid, name: String(arr[1] || '').slice(0, 14) || 'যোদ্ধা', lv: Number(arr[2]) || 1 });
+  }
+  return out;
+}
+function buildRemotes(roster){
+  for(const r of normRoster(roster)) buildRemote(r);
+}
 
 // ---------- লুকানোর জায়গা: কুঁড়েঘর, ভাঙা দেয়াল, ক্রেট-ব্যারেল ----------
 // ভবনের দেয়াল গুলি-দৃষ্টি দুটোই আটকায় — ভিতরে ঢুকে বা আড়ালে বসে লুকানো যায়।
@@ -698,7 +783,7 @@ function buildStructures(){
 }
 
 // ============================== START / EXIT ==============================
-export async function startMatch(){
+export async function startMatch(roster){
   const g = ctx.G;
   if(!ctx.scene() || !g.student){ ctx.toast('আগে লগইন করো'); return; }
   if(!g.progress){ ctx.toast('এখনো প্রস্তুত নয় — একটু পরে চেষ্টা করো'); return; }
@@ -728,6 +813,7 @@ export async function startMatch(){
     pings:[], mapT:0,
     airs:[], airLeft:2, airT: rand(AIR_FIRST[0], AIR_FIRST[1]),
     streak:0, lastKillT:-99, lowHpOn:false, lowBeepT:0,
+    remotes:[], deathSent:false, lastHitSid:'', lastHitName:'', lastHitT:-99,
   };
   // গত ম্যাচের সতর্কবার্তা/ভিগনেট যেন লিক না করে
   if(ctx.el.lowHp) ctx.el.lowHp.classList.remove('show');
@@ -771,7 +857,8 @@ export async function startMatch(){
   }
   ctx.P.grp.visible = false;
 
-  buildPlane(); buildLoot(); buildStructures(); buildZone(); buildBots();
+  const mates = normRoster(roster);
+  buildPlane(); buildLoot(); buildStructures(); buildZone(); buildBots(mates.length); buildRemotes(mates);
   ctx.updatePlayerGun();   // ম্যাচে হাতে মাঠের লুট-বন্দুকই দেখাবে
 
   g.mode = 'match_plane';
@@ -802,6 +889,7 @@ export function exitMatch(){
   if(M.chute) scene.remove(M.chute);
   for(const s of M.loot) if(s.alive) scene.remove(s.grp);
   for(const b of M.bots){ scene.remove(b.grp); if(b.chute) scene.remove(b.chute); }
+  for(const r of M.remotes){ scene.remove(r.grp); if(r.chute) scene.remove(r.chute); }
   for(const s of M.shots) scene.remove(s.grp);
   clearFlashes();
   for(const w of M.walls){ scene.remove(w.mesh); w.mat.dispose(); }
@@ -842,6 +930,7 @@ export function exitMatch(){
 
   const sid = M.sessionId, ended = M.sessionEnded;
   M = null;
+  if(NET.inMatch()){ NET.detachMatch(); NET.leaveRoom(); }  // বন্ধুদের ঘর থেকেও বিদায়
   ctx.updatePlayerGun();   // ম্যাচ শেষ — হাতে আবার দোকানের বন্দুক
   if(sid && !ended) ctx.api('endBattleSession', { sessionId: sid, outcome: 'abandoned' });
 }
@@ -933,6 +1022,110 @@ function botsDropTick(dt){
       }
     }
   }
+}
+
+// ============================== NET (বন্ধুদের সাথে এক ম্যাচ) ==============================
+// নিজের obosthan: প্লেনে ০, প্যারাশুটে ১, মাটিতে ২, শেষ ৩
+function myNetSt(){
+  if(!M) return 0;
+  if(M.phase === 'plane') return 0;
+  if(M.phase === 'drop') return 1;
+  if(M.phase === 'live') return 2;
+  return 3;
+}
+
+// প্রতি ফ্রেমে: নিজের অবস্থান পাঠানো + বন্ধুদের মসৃণভাবে সরানো
+function netTick(dt){
+  if(!M) return;
+  if(NET.inMatch()){
+    const p = P_pos();
+    NET.pushLocal(p.x, p.y, p.z, ctx.P.facing || 0, myNetSt());
+  }
+  for(const r of M.remotes){
+    if(r.gone) continue;
+    if(r.alive === false){                       // শুয়ে পড়া বন্ধু — ধীরে মিলিয়ে যায়
+      r.deadT += dt;
+      r.grp.rotation.x = Math.min(1.4, r.deadT * 3.5);
+      if(r.deadT > 1.8 && r.grp.visible) r.grp.visible = false;
+      continue;
+    }
+    if(r.st === 0 && !r.has){                    // এখনো প্লেনে — দেখা যায় না
+      if(r.grp.visible) r.grp.visible = false;
+      continue;
+    }
+    if(!r.has) continue;
+    r.grp.visible = true;
+    const k = Math.min(1, dt * 11);
+    r.grp.position.x += (r.tx - r.grp.position.x) * k;
+    r.grp.position.y += (r.ty - r.grp.position.y) * k;
+    r.grp.position.z += (r.tz - r.grp.position.z) * k;
+    r.grp.rotation.y = r.try_ + Math.PI;
+    if(r.st === 1){                              // প্যারাশুটে ভাসছে
+      if(r.chute){
+        r.chute.visible = true;
+        r.chute.position.copy(r.grp.position); r.chute.position.y += 1.6;
+        r.chute.rotation.z = Math.sin(ctx.G.time * 1.7) * 0.07;
+      }
+    } else if(r.chute && r.chute.visible){       // নামা শেষ — ছাতা গায়েব
+      r.chute.visible = false;
+    }
+  }
+}
+
+function netOnPos(e){
+  if(!M) return;
+  const r = M.remotes.find(x => x.sid === e.sid);
+  if(!r) return;
+  r.tx = e.x; r.ty = e.y; r.tz = e.z; r.try_ = e.ry; r.st = e.st;
+  if(!r.has){ r.has = true; r.grp.position.set(e.x, e.y, e.z); }
+  if(e.st === 3 && r.alive !== false){          // শেষ নিঃশ্বাস — শুয়ে পড়ুক
+    r.alive = false; r.deadT = 0;
+    if(r.chute){ ctx.scene().remove(r.chute); r.chute = null; }
+    updateTopHud();
+  }
+}
+
+function netOnHit(e){
+  if(!M || M.phase !== 'live') return;
+  M.lastHitSid = e.sid; M.lastHitName = e.name; M.lastHitT = ctx.G.time;
+  const r = M.remotes.find(x => x.sid === e.sid);
+  playerHit(e.dmg, r ? { grp: r.grp } : null);
+}
+
+function netOnDie(e){
+  if(!M) return;
+  const r = M.remotes.find(x => x.sid === e.sid);
+  if(r && r.alive !== false){
+    r.alive = false; r.deadT = 0;
+    if(r.chute){ ctx.scene().remove(r.chute); r.chute = null; }
+    const at = r.grp.position.clone(); at.y += 1.2;
+    ctx.impactBurst(at);
+    updateTopHud();
+  }
+  if(e.bySid === NET.mySid()){                   // বন্ধুকে হারিয়েছি
+    if(r) bumpKill(r.name);
+  } else if(r){
+    addFeed('⚔ ' + (e.byName || 'কেউ') + ' ' + r.name + '-কে হারিয়ে দিল');
+  }
+  checkWin();
+}
+
+function netOnLeave(sid){
+  if(!M) return;
+  const i = M.remotes.findIndex(x => x.sid === sid);
+  if(i < 0) return;
+  const r = M.remotes[i];
+  r.gone = true;
+  ctx.scene().remove(r.grp);
+  if(r.chute) ctx.scene().remove(r.chute);
+  if(r.alive !== false) addFeed('🚪 ' + r.name + ' ম্যাচ ছেড়ে চলে গেল');
+  M.remotes.splice(i, 1);
+  updateTopHud();
+  checkWin();
+}
+
+export function netHandler(){
+  return { onPos: netOnPos, onHit: netOnHit, onDie: netOnDie, onLeave: netOnLeave };
 }
 
 // ============================== QUESTIONS ==============================
@@ -1149,7 +1342,8 @@ export function usePrompt(){
 
 // ============================== HUD ==============================
 function updateTopHud(){
-  const alive = M.bots.filter(b => b.alive).length + 1;
+  const alive = M.bots.filter(b => b.alive).length
+    + M.remotes.filter(r => r.alive !== false && !r.gone).length + 1;
   ctx.el.mhAlive.textContent = '👥 ' + bn(alive);
   ctx.el.mhKills.textContent = '💀 ' + bn(M.kills);
 }
@@ -1269,6 +1463,11 @@ function combatTick(dt){
     const d = Math.hypot(b.grp.position.x - p.x, b.grp.position.z - p.z);
     if(d < bd){ bd = d; best = b; }
   }
+  for(const r of M.remotes){                       // বন্ধুরাও নিশানায় আসে
+    if(r.gone || r.alive === false || !r.has || r.st !== 2) continue;
+    const d = Math.hypot(r.grp.position.x - p.x, r.grp.position.z - p.z);
+    if(d < bd){ bd = d; best = r; }
+  }
   if(!best) return;
 
   if(gun === 0){
@@ -1276,7 +1475,14 @@ function combatTick(dt){
       M.meleeT = MELEE_CD;
       facePlayerTo(best.grp.position);
       ctx.AU.sfx('slam');
-      hitBot(best, MELEE_DMG, false);
+      if(best.net){
+        NET.sendHit(best.sid, MELEE_DMG, false, { x: p.x, z: p.z });
+        const at = best.grp.position.clone(); at.y += 1.3;
+        ctx.impactBurst(at);
+        ctx.G.hitStop = Math.max(ctx.G.hitStop || 0, 0.045);
+      } else {
+        hitBot(best, MELEE_DMG, false);
+      }
     }
     return;
   }
@@ -1305,10 +1511,18 @@ function combatTick(dt){
     return;
   }
   spawnShot(from, to, TRACER_PLAYER, () => {
-    if(!M || !best.alive) return;
+    if(!M || best.alive === false) return;
     const crit = Math.random() < 0.16;
     const dmg = Math.max(1, Math.round(GUN_DMG[tier] * rand(0.92, 1.08) * (crit ? 1.5 : 1)));
-    hitBot(best, dmg, crit);
+    if(best.net){                                  // বন্ধু নিজেই নিজের ক্ষতি গোনে
+      NET.sendHit(best.sid, dmg, crit, { x: p.x, z: p.z });
+      const at = best.grp.position.clone(); at.y += 1.25;
+      ctx.impactBurst(at);
+      if(crit) ctx.AU.sfx('coin');
+      ctx.G.hitStop = Math.max(ctx.G.hitStop || 0, 0.03);
+    } else {
+      hitBot(best, dmg, crit);
+    }
   });
 }
 
@@ -1337,6 +1551,14 @@ function explodeBomb(at){
     if(d < BOMB_RADIUS){
       const dmg = Math.max(8, Math.round(BOMB_DMG * (1 - (d / BOMB_RADIUS) * 0.6)));
       hitBot(b, dmg, false);
+    }
+  }
+  for(const r of M.remotes){                       // বোমার আঘাত বন্ধুদেরও লাগে
+    if(r.gone || r.alive === false || !r.has || r.st !== 2) continue;
+    const d = Math.hypot(r.grp.position.x - at.x, r.grp.position.z - at.z);
+    if(d < BOMB_RADIUS){
+      const dmg = Math.max(8, Math.round(BOMB_DMG * (1 - (d / BOMB_RADIUS) * 0.6)));
+      NET.sendHit(r.sid, dmg, false, { x: at.x, z: at.z });
     }
   }
 }
@@ -1484,6 +1706,29 @@ function playerHit(raw, src){
   if(M.hp <= 0) endMatch(false);
 }
 
+function bumpKill(name){
+  M.kills++;
+  ctx.AU.sfx('coin');
+  ctx.toast('🎯 ' + name + ' টিকে থাকতে পারল না!', 1800);
+  addFeed('🎯 তুমি ' + name + '-কে হারিয়ে দিলে');
+  // টানা জয় — ফ্রি-ফায়ারের 'RAMBO' ধাঁচের স্ট্রিক-ফালকা
+  const now = ctx.G.time;
+  M.streak = (now - (M.lastKillT || -99) < 26) ? (M.streak || 0) + 1 : 1;
+  M.lastKillT = now;
+  const msg = {3:'🔥 টানা ৩ জয়!', 5:'⚡ থামানো যাচ্ছে না — টানা ৫!', 7:'👑 অপ্রতিরোধ্য — টানা ৭!', 10:'🌟 কিংবদন্তি — টানা ১০!'}[M.streak];
+  if(msg){ streakBanner(msg); ctx.AU.sfx('streak'); }
+  updateTopHud();
+}
+
+function checkWin(){
+  if(!M || M.phase !== 'live') return;
+  const anyBot = M.bots.some(x => x.alive);
+  const anyMate = M.remotes.some(r => r.alive !== false && !r.gone);
+  if(!anyBot && !anyMate){
+    setTimeout(() => { if(M && M.phase === 'live') endMatch(true); }, 900);
+  }
+}
+
 function killBot(b, killer){
   if(!b.alive) return;
   b.alive = false;
@@ -1493,16 +1738,7 @@ function killBot(b, killer){
   const at = b.grp.position.clone(); at.y += 1.2;
   ctx.impactBurst(at);
   if(killer === 'তুমি'){
-    M.kills++;
-    ctx.AU.sfx('coin');
-    ctx.toast('🎯 ' + b.name + ' টিকে থাকতে পারল না!', 1800);
-    addFeed('🎯 তুমি ' + b.name + '-কে হারিয়ে দিলে');
-    // টানা জয় — ফ্রি-ফায়ারের 'RAMBO' ধাঁচের স্ট্রিক-ফালকা
-    const now = ctx.G.time;
-    M.streak = (now - (M.lastKillT || -99) < 26) ? (M.streak || 0) + 1 : 1;
-    M.lastKillT = now;
-    const msg = {3:'🔥 টানা ৩ জয়!', 5:'⚡ থামানো যাচ্ছে না — টানা ৫!', 7:'👑 অপ্রতিরোধ্য — টানা ৭!', 10:'🌟 কিংবদন্তি — টানা ১০!'}[M.streak];
-    if(msg){ streakBanner(msg); ctx.AU.sfx('streak'); }
+    bumpKill(b.name);
   } else if(killer === 'বলয়'){
     addFeed('🔵 বলয়ের চাপে ' + b.name + ' বিদায় নিল');
   } else {
@@ -1510,9 +1746,7 @@ function killBot(b, killer){
   }
   if(M.prompt && M.prompt.spot && !M.prompt.spot.alive) M.prompt = null;
   updateTopHud();
-  if(!M.bots.some(x => x.alive) && M.phase === 'live'){
-    setTimeout(() => { if(M && M.phase === 'live') endMatch(true); }, 900);
-  }
+  checkWin();
 }
 
 function botsTick(dt){
@@ -1735,6 +1969,17 @@ function drawMinimap(cv){
       c.lineTo(X(a.x), Z(a.z) + 5.5); c.lineTo(X(a.x) - 5.5, Z(a.z));
       c.closePath(); c.fill();
     }
+  }
+
+  // বন্ধুরা — জ্বলজ্বলে আকাশি বিন্দু
+  for(const r of (M.remotes || [])){
+    if(r.gone || r.alive === false || !r.has) continue;
+    if(r.grp.position.y > 12) continue;            // প্যারাশুটে এখনো উপরে
+    const bx = X(r.grp.position.x), bz = Z(r.grp.position.z);
+    c.fillStyle = 'rgba(78,168,255,.95)';
+    c.beginPath(); c.arc(bx, bz, 3.6, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.8)'; c.lineWidth = 1.1;
+    c.beginPath(); c.arc(bx, bz, 3.6, 0, Math.PI * 2); c.stroke();
   }
 
   // গুলির আওয়াজ — লাল বিন্দু, ধীরে মিলিয়ে যায়
@@ -2052,11 +2297,12 @@ function planeTick(dt){
 
 export function tick(dt){
   if(!M) return;
-  if(M.phase === 'over'){ shotsTick(dt); flashesTick(dt); return; }
+  if(M.phase === 'over'){ shotsTick(dt); flashesTick(dt); netTick(dt); return; }
   if(M.phase === 'plane' || M.phase === 'drop'){
     planeTick(dt);
     botsDropTick(dt);
     minimapTick(dt);
+    netTick(dt);                 // নিজের অবস্থান যাচ্ছে + বন্ধুরা নামছে
     return;
   }
   if(M.phase !== 'live' || dt <= 0) return;
@@ -2075,6 +2321,7 @@ export function tick(dt){
   lowHpTick(dt);
   compassTick(dt);
   scopeTick(dt);
+  netTick(dt);
 }
 
 // কম HP — লাল কিনারা স্পন্দন + হৃদস্পন্দনের শব্দ (ফ্রি-ফায়ার-ধাঁচ)
@@ -2149,6 +2396,15 @@ function scopeAimTick(el){
   for(const b of M.bots){
     if(!b.alive) continue;
     const dx = b.grp.position.x - P.x, dz = b.grp.position.z - P.z;
+    const dist = Math.hypot(dx, dz);
+    if(dist < 0.5 || dist > SCOPE_MAXD) continue;
+    const dot = (dx * fx + dz * fz) / dist;
+    if(dot < Math.cos(SCOPE_CONE)) continue;
+    if(dist < bestD){ bestD = dist; hot = true; }
+  }
+  for(const r of M.remotes){                       // স্কোপে বন্ধুরাও ধরা পড়ে
+    if(r.gone || r.alive === false || !r.has || r.st !== 2) continue;
+    const dx = r.grp.position.x - P.x, dz = r.grp.position.z - P.z;
     const dist = Math.hypot(dx, dz);
     if(dist < 0.5 || dist > SCOPE_MAXD) continue;
     const dot = (dx * fx + dz * fz) / dist;
@@ -2290,7 +2546,15 @@ async function endMatch(won){
   M.lowHpOn = false;
 
   const aliveBots = M.bots.filter(b => b.alive).length;
-  const rank = won ? 1 : aliveBots + 1;
+  const aliveR = M.remotes.filter(r => r.alive !== false && !r.gone).length;
+  const rank = won ? 1 : aliveBots + aliveR + 1;
+
+  // শেষ নিঃশ্বাসের খবর বন্ধুদের কানে — কে হারাল, কে হারালো
+  if(!won && NET.inMatch() && !M.deathSent){
+    M.deathSent = true;
+    const fresh = (g.time - M.lastHitT) < 8;
+    NET.sendDie(NET.mySid(), fresh ? M.lastHitSid : '', fresh ? M.lastHitName : '');
+  }
   const xpGain = won ? 120 + M.kills * 15 : 30 + M.kills * 10;
   const coinGain = won ? 60 + M.kills * 8 : 20 + M.kills * 5;
   const ck = ctx.currentSubject(), cur = ctx.currencyOf(ck);
@@ -2326,7 +2590,7 @@ async function endMatch(won){
     if(ctx.el.dStatLabel) ctx.el.dStatLabel.textContent = 'ম্যাচ সারসংক্ষেপ';
     ctx.el.dSub.textContent = 'র‍্যাঙ্ক #' + bn(rank) + '/' + bn(MATCH_TOTAL) + ' — লড়াই দারুণ ছিল, পরেরবার আরও ভালো হবে! আবার লড়ো।';
     ctx.el.dStat.textContent = 'পরাজিত ' + bn(M.kills) + ' · সঠিক ' + bn(M.correct) + '/' + bn(M.asked) +
-      ' (' + bn(acc) + '%) · শেষে টিকে ছিল ' + bn(aliveBots) + ' জন';
+      ' (' + bn(acc) + '%) · শেষে টিকে ছিল ' + bn(aliveBots + aliveR) + ' জন';
     ctx.show(ctx.el.defeat);
   }
   g.mode = 'cinematic';

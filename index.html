@@ -492,6 +492,38 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 #rotate-gate .rg-title{ font-size:clamp(21px,5.6vw,32px); font-weight:900; color:var(--txt); }
 #rotate-gate .rg-sub{ font-size:13.5px; line-height:1.75; color:var(--dim); max-width:430px; }
 @media (orientation: portrait){ #rotate-gate{ display:flex; } }
+
+/* ---------- বন্ধুদের সাথে ম্যাচ — লবি (ঘর-কোড) ---------- */
+#net-lobby{ position:fixed; inset:0; z-index:150; display:flex; overflow:auto;
+  align-items:center; justify-content:center; padding:18px;
+  background:linear-gradient(180deg, rgba(6,12,9,.6), rgba(6,12,9,.9)); }
+.nl-card{ width:min(440px,94vw); max-height:92vh; overflow:auto;
+  background:var(--panel2); border:1px solid var(--line); border-radius:22px;
+  padding:20px 18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:13px; }
+.nl-title{ font-size:clamp(18px,3.4vw,22px); font-weight:900; color:var(--txt); text-align:center; }
+.nl-title span{ color:var(--accent2); }
+.nl-roomrow{ display:flex; align-items:center; gap:9px;
+  background:rgba(255,255,255,.045); border:1px solid var(--line); border-radius:14px; padding:8px 10px; }
+.nl-lbl{ color:var(--dim); font-size:13.5px; font-weight:700; flex:0 0 auto; }
+#nl-room{ flex:1 1 auto; min-width:0; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+  background:rgba(0,0,0,.28); color:var(--accent2); font-family:inherit; font-size:16px; font-weight:800;
+  letter-spacing:.6px; outline:none; text-align:center; }
+#nl-room:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(255,138,60,.15); }
+#nl-copy{ flex:0 0 auto; padding:9px 12px; font-size:13px; }
+.nl-status{ font-size:13.5px; line-height:1.75; color:var(--dim); text-align:center;
+  background:rgba(255,255,255,.035); border:1px solid var(--line); border-radius:12px; padding:9px 12px; }
+.nl-status b{ color:var(--txt); }
+.nl-warn{ color:#FFC07A; }
+.nl-ok{ color:var(--green); }
+.nl-players{ display:flex; flex-wrap:wrap; gap:7px; justify-content:center; }
+.nl-chip{ font-size:12.5px; font-weight:700; color:var(--txt);
+  background:rgba(120,180,220,.1); border:1px solid var(--line); border-radius:999px; padding:6px 12px; }
+.nl-chip.me{ background:rgba(255,138,60,.16); border-color:rgba(255,138,60,.45); color:var(--accent2); }
+.nl-hint{ font-size:12.5px; line-height:1.8; color:var(--dim); }
+.nl-hint b{ color:var(--txt); }
+.nl-btns{ display:flex; flex-direction:column; gap:9px; }
+.nl-btns .btn{ width:100%; }
+.nl-btns .btn:disabled{ opacity:.45; filter:grayscale(.6); }
 </style>
 </head>
 <body>
@@ -529,6 +561,7 @@ button{ font-family:inherit; cursor:pointer; border:none; }
     </div>
   </div>
   <button class="btn" id="btn-match" style="min-width:min(300px,80vw)">🪂 &nbsp;বড় ম্যাচ (ব্যাটল রয়্যাল)</button>
+  <button class="btn ghost hidden" id="btn-friend-match" style="min-width:min(300px,80vw)">👥 &nbsp;বন্ধুদের সাথে খেলো (ঘর-কোড)</button>
   <button class="btn ghost" id="btn-play" style="min-width:min(300px,80vw)">🌴 &nbsp;জগৎ-যুদ্ধ (গল্প)</button>
   <div class="install-row">
     <button class="btn ghost small" id="btn-title-settings">⚙️ &nbsp;সেটিংস</button>
@@ -779,6 +812,7 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   <div class="rg-sub">স্মৃতির জঙ্গল আড়াআড়ি পর্দার খেলা — ফোন ঘুরিয়ে ধরলেই খেলা চলবে</div>
 </div>
 
+<script src="./net-config.js"></script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
 </script>

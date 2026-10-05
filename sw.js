@@ -1,10 +1,12 @@
 // Service Worker — স্মৃতির জঙ্গল (standalone game PWA, scope: ./game/)
-const CACHE_NAME = 'smritir-jungle-v24';
+const CACHE_NAME = 'smritir-jungle-v26';
 const PRECACHE = [
   './',
   './index.html',
   './game.js',
   './match.js',
+  './net.js',
+  './net-config.js',
   './manifest.json',
   './icon.svg',
   './icon-192.png',
@@ -40,6 +42,7 @@ self.addEventListener('install', event => {
       // three.js + jungle models are big: fetch them in the background without blocking install
       caches.open(CACHE_NAME).then(c => {
         c.add('./vendor/three.module.js').catch(err => console.warn('three precache skip', err));
+      c.add('./vendor/supabase.js').catch(err => console.warn('supabase precache skip', err));
         MODEL_FILES.forEach(n => c.add('./assets/' + n + '.glb').catch(() => {}));
         GUN_FILES.forEach(n => c.add('./assets/' + n).catch(() => {}));
         GEAR_FILES.forEach(n => c.add('./assets/' + n).catch(() => {}));
