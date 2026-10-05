@@ -483,16 +483,6 @@ button{ font-family:inherit; cursor:pointer; border:none; }
   background:rgba(8,14,12,.55); border:2px solid rgba(255,255,255,.22);
   box-shadow:var(--shadow); }
 
-/* আড়াআড়ি গেট — ফোন খাড়া থাকলে দেখানো হয় (ফ্রি-ফায়ার-ধাঁচ) */
-#rotate-gate{ position:fixed; inset:0; z-index:200; display:none; flex-direction:column;
-  align-items:center; justify-content:center; gap:12px; text-align:center; padding:26px;
-  background:linear-gradient(180deg,#07110D,#0B1A14 55%,#08120E); }
-#rotate-gate .rg-phone{ font-size:58px; line-height:1; animation:rg-tilt 2s cubic-bezier(.5,.05,.4,.95) infinite; }
-@keyframes rg-tilt{ 0%,16%{ transform:rotate(0deg); } 44%,66%{ transform:rotate(90deg) translateY(-8px); } 94%,100%{ transform:rotate(0deg); } }
-#rotate-gate .rg-title{ font-size:clamp(21px,5.6vw,32px); font-weight:900; color:var(--txt); }
-#rotate-gate .rg-sub{ font-size:13.5px; line-height:1.75; color:var(--dim); max-width:430px; }
-@media (orientation: portrait){ #rotate-gate{ display:flex; } }
-
 /* ---------- বন্ধুদের সাথে ম্যাচ — লবি (ঘর-কোড) ---------- */
 #net-lobby{ position:fixed; inset:0; z-index:150; display:flex; overflow:auto;
   align-items:center; justify-content:center; padding:18px;
@@ -804,13 +794,6 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 <div id="toast"></div>
 <div id="subtitle"></div>
 <div id="fade-black"></div>
-
-<!-- ======= আড়াআড়ি গেট — ফোন খাড়া থাকলে দেখানো হয় ======= -->
-<div id="rotate-gate" aria-hidden="true">
-  <div class="rg-phone">📱</div>
-  <div class="rg-title">ফোনটি আড়াআড়ি ধরো</div>
-  <div class="rg-sub">স্মৃতির জঙ্গল আড়াআড়ি পর্দার খেলা — ফোন ঘুরিয়ে ধরলেই খেলা চলবে</div>
-</div>
 
 <script src="./net-config.js"></script>
 <script type="importmap">
