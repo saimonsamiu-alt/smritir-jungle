@@ -57,7 +57,8 @@ const LOOT_KINDS = {
   wall:       { icon:'🧱', label:'গ্লু-প্রাচীর',     need:1, tier:0, color:0x9FD8FF },
   airdrop:    { icon:'🪂', label:'লুটের বাক্স',     need:4, tier:9, color:0xFF5A45 },
 };
-const LOOT_DISTRIB = [['bag',3],['gun_basic',5],['gun_good',4],['gun_sniper',2],
+// মাটিতে বন্দুক পর্যাপ্ত (২১টা) — খালি হাতে লড়াইয়ের অভাব এড়াতে বাকি লুট অপরিবর্তিত
+const LOOT_DISTRIB = [['bag',3],['gun_basic',10],['gun_good',7],['gun_sniper',4],
   ['armor',3],['heal',3],['bomb',4],['wall',3]];
 
 const GUN_TIERS = ['খালি হাত','সাধারণ বন্দুক','উন্নত বন্দুক','স্নাইপার রাইফেল'];
@@ -442,6 +443,7 @@ function buildBot(i, total){
     gun = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.11, 0.68), darkMat);
     gun.position.set(0.3, 1.15, 0.32);
   }
+  gun.visible = false; // বট খালি হাতে নামে — নামার কয়েক সেকেন্ড পর একটা বন্দুক কুড়িয়ে নেয়
   root.add(gun);
   const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, 0.16), darkMat);
   legL.position.set(-0.14, 0.28, 0); root.add(legL);
@@ -468,7 +470,7 @@ function buildBot(i, total){
     color, state:'plane',
     jumpAt: (i / Math.max(1, (total || BOT_NAMES.length) - 1)) * 10.5 + rand(0.5, 2.5), // প্লেনের পুরোটা জুড়ে যার যার সময়ে লাফ
     land: { x:lx, z:lz },
-    activeAt: 0, landedAt: 0, chuteT: 0,
+    activeAt: 0, landedAt: 0, chuteT: 0, armed: false, armedAt: 0,
     hp: 100, alive: true, deadT: 0, target: null, provokedT: 0,
     foe: null, foeT: 0,
     speed: rand(4.2, 5.6), fireT: rand(1.5, 3), fireCD: rand(1.7, 2.6),
@@ -986,6 +988,7 @@ function landBot(b){
   b.grp.position.y = groundY(b.grp.position.x, b.grp.position.z);
   b.landedAt = ctx.G.time;
   b.activeAt = ctx.G.time + rand(2, 5); // একটু সময় নিয়ে নামে, তারপর খেলায় যোগ দেয়
+  b.armedAt = ctx.G.time + rand(4, 9);  // নামার কয়েক সেকেন্ড পর একটা বন্দুক কুড়িয়ে নেয়
   if(b.chute){ ctx.scene().remove(b.chute); b.chute = null; }
 }
 
@@ -1762,6 +1765,7 @@ function botsTick(dt){
       continue;
     }
     if(b.state !== 'active') continue;
+    if(!b.armed && (ctx.G.time >= b.armedAt || b.provokedT > 0)) b.armed = true; // কুড়োনো বন্দুক হাতে এল
 
     // শেষ বলয়ে চূড়ান্ত চাপ — ভিতরে থাকলেও রক্ষা নেই
     const cd_ = collapseDps();
@@ -1795,7 +1799,7 @@ function botsTick(dt){
         }
         if(b.stuckT > 1.4){ b.target = null; b.giveUpT = 2.5; b.stuckT = 0; }
         b.fireT -= dt;
-        if(b.fireT <= 0 && dp < 30 && seen){
+        if(b.fireT <= 0 && dp < 30 && seen && b.armed){
           botShoot(b, 'player');
           b.fireT = b.fireCD * rand(0.85, 1.15);
         }
@@ -1834,6 +1838,7 @@ function botsTick(dt){
 
 // ---------- বট বনাম বট — নিজেরাই শত্রু খুঁজে লড়ে ----------
 function botFoeTick(b, dt){
+  if(!b.armed) return false; // খালি হাতে লড়াইয়ে নামে না — বন্দুক কুড়োনো পর্যন্ত ঘুরে বেড়ায়
   if(b.foe && (!b.foe.alive || (b.foe.state !== 'active' && b.foe.state !== 'landed'))) b.foe = null;
   if(b.foe){
     const f = b.foe;
@@ -1879,7 +1884,7 @@ function lodTick(dt){
     b.grp.visible = d < LOD_FAR;
     const detail = d < LOD_DETAIL;
     b.helmet.visible = detail;
-    b.gun.visible = detail;
+    b.gun.visible = detail && b.armed; // বন্দুক কুড়োনোর আগে হাত খালি দেখায়
     b.legL.visible = detail;
     b.legR.visible = detail;
     if(b.pack) b.pack.visible = detail;
