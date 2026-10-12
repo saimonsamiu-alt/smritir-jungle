@@ -2849,7 +2849,7 @@ async function startPlay(){
 
 function bindScreens(){
   el.btnPlay.addEventListener('click', () => { enterImmersive(); AU.init(); AU.resume(); AU.sfx('click'); openWorlds(); });
-  el.btnMatch.addEventListener('click', startMatchFlow);
+  el.btnMatch.addEventListener('click', () => startMatchFlow());
   el.btnFriendMatch.addEventListener('click', openFriendMatch);
   el.btnWorldsClose.addEventListener('click', closeWorlds);
   el.worldsGrid.addEventListener('click', e => {

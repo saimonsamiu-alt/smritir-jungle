@@ -551,7 +551,7 @@ function buildRemote(r){
 function normRoster(roster){
   const out = [];
   const me = NET.mySid();
-  for(const r of (roster || [])){
+  for(const r of (Array.isArray(roster) ? roster : [])){
     const arr = Array.isArray(r) ? r : [r && r.sid, r && r.name, r && r.lv];
     const sid = String(arr[0] || '');
     if(!sid || sid === me) continue;
