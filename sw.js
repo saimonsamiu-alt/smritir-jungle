@@ -1,5 +1,9 @@
 // Service Worker — স্মৃতির জঙ্গল (standalone game PWA, scope: ./game/)
-const CACHE_NAME = 'smritir-jungle-v30';
+// v31: টাটকা-ডেলিভারি হার্ডেনিং — নতুন SW ইনস্টলের সময় সব ফাইল HTTP-ক্যাশ এড়িয়ে
+// (cache:'reload') নামে, আর রানটাইম রিফ্রেশ revalidate করে। আগে GitHub Pages-এর
+// ১০-মিনিট HTTP-ক্যাশ cache.add/fetch-এর ভেতর দিয়ে পুরোনো game.js/match.js কে
+// SW-ক্যাশে ঢুকিয়ে দিত — তাই ফিক্স-ডিপ্লয়ের পরও ফোনে পুরোনো কোড চলত।
+const CACHE_NAME = 'smritir-jungle-v31';
 const PRECACHE = [
   './',
   './index.html',
@@ -34,18 +38,21 @@ const GUN_FILES = ['guns/blaster-l.glb','guns/blaster-p.glb','guns/blaster-f.glb
 // আসল গিয়ার মডেল (poly.pizza, CC0): পিঠের ব্যাকপ্যাক ও ভারী বর্ম
 const GEAR_FILES = ['gear/backpack.glb','gear/armor.glb'];
 
+// প্রিক্যাশ-ডাউনলোড HTTP-ক্যাশ বাইপাস করে সার্ভার থেকেই টাটকা নামায়
+const fresh = url => new Request(url, { cache: 'reload' });
+
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache =>
-      Promise.all(PRECACHE.map(url => cache.add(url).catch(err => console.warn('precache skip:', url, err))))
+      Promise.all(PRECACHE.map(url => cache.add(fresh(url)).catch(err => console.warn('precache skip:', url, err))))
     ).then(() => {
       // three.js + jungle models are big: fetch them in the background without blocking install
       caches.open(CACHE_NAME).then(c => {
-        c.add('./vendor/three.module.js').catch(err => console.warn('three precache skip', err));
-      c.add('./vendor/supabase.js').catch(err => console.warn('supabase precache skip', err));
-        MODEL_FILES.forEach(n => c.add('./assets/' + n + '.glb').catch(() => {}));
-        GUN_FILES.forEach(n => c.add('./assets/' + n).catch(() => {}));
-        GEAR_FILES.forEach(n => c.add('./assets/' + n).catch(() => {}));
+        c.add(fresh('./vendor/three.module.js')).catch(err => console.warn('three precache skip', err));
+      c.add(fresh('./vendor/supabase.js')).catch(err => console.warn('supabase precache skip', err));
+        MODEL_FILES.forEach(n => c.add(fresh('./assets/' + n + '.glb')).catch(() => {}));
+        GUN_FILES.forEach(n => c.add(fresh('./assets/' + n)).catch(() => {}));
+        GEAR_FILES.forEach(n => c.add(fresh('./assets/' + n)).catch(() => {}));
       });
       return self.skipWaiting();
     })
@@ -70,7 +77,7 @@ self.addEventListener('fetch', event => {
   // Pages: network first (new deploy shows immediately), cache fallback offline
   if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
     event.respondWith(
-      fetch(req).then(res => {
+      fetch(req, { cache: 'no-cache' }).then(res => {
         if (res && res.status === 200) {
           const copy = res.clone();
           caches.open(CACHE_NAME).then(c => c.put('./index.html', copy));
@@ -84,7 +91,7 @@ self.addEventListener('fetch', event => {
   // Everything else (three.js, KaTeX CDN...): cache first, refresh in background
   event.respondWith(
     caches.match(req).then(cached => {
-      const refresh = fetch(req).then(res => {
+      const refresh = fetch(req, { cache: 'no-cache' }).then(res => {
         if (res && res.status === 200 && (res.type === 'basic' || res.type === 'cors')) {
           const copy = res.clone();
           caches.open(CACHE_NAME).then(c => c.put(req, copy));

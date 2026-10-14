@@ -810,7 +810,20 @@ button{ font-family:inherit; cursor:pointer; border:none; }
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW register failed', err));
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => { reg.update().catch(() => {}); })   // প্রতি খোলায় টাটকা-চেক — ব্রাউজারের থ্রটল বাইপাস
+      .catch(err => console.warn('SW register failed', err));
+    // নতুন সংস্করণ নিয়ন্ত্রণ নিলেই নিজে থেকে একবার রিফ্রেশ — পুরোনো কোড ক্যাশে আটকে থাকবে না।
+    // (আগেই নিয়ন্ত্রক ছিল মানে এটা আপডেট, প্রথম ইনস্টল নয় — তাই লুপের ভয় নেই)
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (window.__sjReloading) return;
+        window.__sjReloading = true;
+        const t = document.getElementById('toast');
+        if (t) { t.textContent = '✨ নতুন সংস্করণ এসেছে — গেম আবার খুলছে…'; t.classList.add('show'); }
+        setTimeout(() => location.reload(), 700);
+      });
+    }
   });
 }
 </script>
