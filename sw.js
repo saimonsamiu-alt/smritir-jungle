@@ -1,9 +1,11 @@
 // Service Worker — স্মৃতির জঙ্গল (standalone game PWA, scope: ./game/)
+// v33: অভ্যাস মাঠ — অধ্যায়-ধরে টাইমড MCQ ড্রিল (getDrillQuestions + স্ট্রিক/XP/মুদ্রা,
+// ভুল প্রশ্ন দেবদূতের রিভিউ-পুলে স্বয়ংক্রিয়); সার্ভারে match-শাখা + pickWeightedBattleQuestion।
 // v31: টাটকা-ডেলিভারি হার্ডেনিং — নতুন SW ইনস্টলের সময় সব ফাইল HTTP-ক্যাশ এড়িয়ে
 // (cache:'reload') নামে, আর রানটাইম রিফ্রেশ revalidate করে। আগে GitHub Pages-এর
 // ১০-মিনিট HTTP-ক্যাশ cache.add/fetch-এর ভেতর দিয়ে পুরোনো game.js/match.js কে
 // SW-ক্যাশে ঢুকিয়ে দিত — তাই ফিক্স-ডিপ্লয়ের পরও ফোনে পুরোনো কোড চলত।
-const CACHE_NAME = 'smritir-jungle-v32';
+const CACHE_NAME = 'smritir-jungle-v33';
 const PRECACHE = [
   './',
   './index.html',

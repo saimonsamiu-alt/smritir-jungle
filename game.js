@@ -57,6 +57,9 @@ const el = {
   btnShop: $('btn-shop'), shop: $('screen-shop'), shopWallet: $('shop-wallet'), shopTabs: $('shop-tabs'),
   shopGrid: $('shop-grid'), btnShopClose: $('btn-shop-close'),
   worlds: $('screen-worlds'), worldsGrid: $('worlds-grid'), btnWorldsClose: $('btn-worlds-close'),
+  drill: $('screen-drill'), drillGrid: $('drill-grid'), drillWho: $('drill-who'), drillId: $('drill-id'),
+  btnDrillClose: $('btn-drill-close'), btnDrillWhole: $('btn-drill-whole'),
+  qStreak: $('q-streak'), qTimer: $('q-timer'),
 };
 
 function toast(msg, ms=2200){
@@ -1817,6 +1820,14 @@ let battleTimerInt = null;
 // A correct review answer makes the question leave the pool for good.
 const REVIEW = { active:false, locked:false, list:[], idx:0, correct:0, answered:0, sessionId:null, count:0, oldestDays:0 };
 
+// ============================== অভ্যাস মাঠ (ড্রিল) ==============================
+// অধ্যায়-ধরে টাইমড MCQ প্র্যাকটিস — মনস্টার/HP নেই; ভুল উত্তর exposure-এ জমে
+// দেবদূতের রিভিউ-পুলে স্বয়ংক্রিয় ফিরে আসে (সার্ভারের getDrillQuestions + drill-গার্ড)।
+const DRILL = { active:false, locked:false, list:[], idx:0, correct:0, answered:0,
+  streak:0, bestStreak:0, sessionId:null, timerInt:null, timeLeft:0, qStart:0, label:'' };
+const DRILL_TIME = 30;
+let drillWorld = null;
+
 function enterBattle(monster){
   if(G.battle) return;
   AU.sfx('roar');
@@ -1898,7 +1909,8 @@ function renderQuestion(q){
   el.qPanel.style.animation = 'none'; void el.qPanel.offsetWidth; el.qPanel.style.animation = '';
 }
 function onOptClick(i, btn){
-  if(REVIEW.active) answerReview(i, btn);
+  if(DRILL.active) answerDrill(i, btn);
+  else if(REVIEW.active) answerReview(i, btn);
   else answerQuestion(i, btn);
 }
 // ভালো/খারাপ দেবদূত — পুরোনো ভুল ফিরে এলে মনে করিয়ে দেয়, কখনো ভর্ৎসনা নয়।
@@ -2224,6 +2236,137 @@ function closeReview(){
   rebuildWorldState();
 }
 
+// ---------- অভ্যাস মাঠ (জগৎ-বাছাই পর্দা থেকে) ----------
+function openDrillFor(worldId){
+  const w = (G.worlds || []).find(x => x.id === worldId);
+  if(!w || !(w.chapters || []).length){ toast('এই বিষয়ে এখনো কোনো অধ্যায় যোগ হয়নি'); return; }
+  if(!G.student){ toast('আগে টিউশন অ্যাকাউন্টে লগইন করো'); return; }
+  AU.sfx('click');
+  drillWorld = w;
+  hide(el.worlds);
+  el.drillWho.innerHTML = 'ছাত্র: <b>' + esc(G.student.name) + '</b>';
+  el.drillId.textContent = G.student.studentCode || '—';
+  renderDrillChapters();
+  show(el.drill);
+}
+function renderDrillChapters(){
+  const w = drillWorld; if(!w || !el.drillGrid) return;
+  if(!(w.chapters || []).length){
+    el.drillGrid.innerHTML = '<div class="shop-empty">এখনো কোনো অধ্যায় যোগ হয়নি।</div>';
+    return;
+  }
+  el.drillGrid.innerHTML = w.chapters.map((c, i) =>
+    `<button class="drill-ch" data-drill-ch="${esc(c.id)}">
+      <div class="dc-name">${esc(c.title || ('অধ্যায় ' + bnNum(i + 1)))}</div>
+      <div class="dc-sub">${c.defeated ? '<span class="dc-done">✓ জয়ী</span>' : ''}${esc(w.title || '')}</div>
+    </button>`).join('');
+}
+async function startDrill(topicIds, label){
+  if(!drillWorld || DRILL.active) return;
+  AU.sfx('click');
+  const res = await api('getDrillQuestions', { slug: G.student.slug, topicIds, limit: 10 });
+  if(!res || res.status !== 'success' || !res.questions || !res.questions.length){
+    toast('এখানে এখনো প্রশ্ন নেই — শিক্ষক প্রশ্ন যোগ করলে আবার এসো');
+    return;
+  }
+  const sess = await api('startBattleSession', { slug: G.student.slug, subject: drillWorld.subject, monsterType: 'drill', monsterRef: drillWorld.id });
+  if(!sess || sess.status !== 'success'){ toast('সার্ভারে সংযোগ ব্যর্থ — আবার চেষ্টা করো'); return; }
+  DRILL.active = true; DRILL.locked = false;
+  DRILL.list = res.questions; DRILL.idx = 0; DRILL.correct = 0; DRILL.answered = 0;
+  DRILL.streak = 0; DRILL.bestStreak = 0;
+  DRILL.label = label || drillWorld.title || 'অভ্যাস';
+  DRILL.sessionId = sess.sessionId;
+  hide(el.drill); hide(el.worlds);
+  G.mode = 'battle';
+  showDrillQuestion();
+}
+function showDrillQuestion(){
+  const item = DRILL.list[DRILL.idx]; if(!item){ finishDrill(); return; }
+  el.qHeadTxt.textContent = '🎯 ' + DRILL.label + ' — প্রশ্ন ' + (DRILL.idx + 1) + '/' + DRILL.list.length;
+  updateStreakChip();
+  show(el.qHead);
+  renderQuestion(item);
+  DRILL.locked = false;
+  startDrillTimer();
+}
+function updateStreakChip(){
+  if(DRILL.streak >= 2){ el.qStreak.textContent = '🔥 স্ট্রিক ' + bnNum(DRILL.streak); show(el.qStreak); }
+  else hide(el.qStreak);
+}
+function startDrillTimer(){
+  stopDrillTimer();
+  DRILL.timeLeft = DRILL_TIME; DRILL.qStart = Date.now();
+  updateDrillTimer();
+  show(el.qTimer);
+  DRILL.timerInt = setInterval(() => {
+    if(!DRILL.active || DRILL.locked){ stopDrillTimer(); return; }
+    DRILL.timeLeft -= 1;
+    updateDrillTimer();
+    if(DRILL.timeLeft <= 0){ stopDrillTimer(); answerDrill(-1, null); }
+  }, 1000);
+}
+function stopDrillTimer(){ if(DRILL.timerInt){ clearInterval(DRILL.timerInt); DRILL.timerInt = null; } }
+function updateDrillTimer(){
+  const t = Math.max(0, DRILL.timeLeft);
+  el.qTimer.textContent = '⏱ ' + bnNum(t) + ' সে.';
+  el.qTimer.classList.toggle('danger', t <= 10);
+}
+async function answerDrill(chosen, btn){
+  if(!DRILL.active || DRILL.locked) return;
+  DRILL.locked = true;
+  stopDrillTimer();
+  const item = DRILL.list[DRILL.idx]; if(!item) return;
+  const timeTakenSec = Math.max(0, Math.round((Date.now() - DRILL.qStart) / 1000));
+  const res = await api('submitBattleAnswer', {
+    sessionId: DRILL.sessionId, slug: G.student.slug, topicId: item.topicId,
+    questionId: item.id, chosenIndex: chosen, timeTakenSec,
+    isReview: 'false', monsterType: 'drill'
+  });
+  if(!res || res.status !== 'success'){ toast('উত্তর জমা ব্যর্থ — সংযোগ দেখো'); DRILL.locked = false; startDrillTimer(); return; }
+  lockOptions(btn, res.correctIndex, chosen);
+  DRILL.answered++;
+  if(res.correct){
+    DRILL.correct++; DRILL.streak++;
+    DRILL.bestStreak = Math.max(DRILL.bestStreak, DRILL.streak);
+    AU.sfx('right');
+  } else { DRILL.streak = 0; AU.sfx('wrong'); }
+  updateStreakChip();
+  setTimeout(() => {
+    DRILL.idx++;
+    if(DRILL.idx >= DRILL.list.length) finishDrill();
+    else showDrillQuestion();
+  }, res.correct ? 950 : 1500);
+}
+function finishDrill(){
+  stopDrillTimer();
+  const total = DRILL.list.length, c = DRILL.correct;
+  subtitle('🎯 ' + (c === total
+    ? 'সবগুলো ঠিক! এবারের অভ্যাস দুর্দান্ত হলো — দুর্দান্ত স্মৃতি!'
+    : c + 'টা ঠিক হলো, ভুলগুলো দেবদূত পরে আবার জিজ্ঞেস করবে — শোধরানোর সুযোগ থাকলো।'), 4500);
+  closeDrill();
+}
+function closeDrill(){
+  if(!DRILL.active) return;
+  const total = DRILL.list.length, c = DRILL.correct, answered = DRILL.answered;
+  DRILL.active = false; DRILL.locked = false;
+  stopDrillTimer();
+  hide(el.qPanel); hide(el.qHead); hide(el.qAngel); hide(el.qStreak); hide(el.qTimer);
+  const perfect = total > 0 && c === total;
+  const xpGain = c * 2 + (perfect ? 5 : 0) + (DRILL.bestStreak >= 5 ? 3 : 0);
+  const coinGain = c * 2 + (perfect ? 2 : 0);
+  const ck = subjectKey(drillWorld.subject), cur = currencyOf(ck);
+  if(xpGain) G.progress.gameXP += xpGain;
+  if(coinGain){ G.progress.coins += coinGain; addCurrency(ck, coinGain); }
+  refreshHud();
+  if(xpGain || coinGain) saveProgress();
+  if(DRILL.sessionId) api('endBattleSession', { sessionId: DRILL.sessionId, outcome: answered >= total && total > 0 ? 'won' : 'abandoned' });
+  DRILL.sessionId = null;
+  if(xpGain) toast('🎯 অভ্যাস-পুরস্কার — +' + xpGain + ' XP, +' + coinGain + ' ' + cur.icon, 3200);
+  G.mode = 'title';
+  renderDrillChapters();
+  show(el.drill);
+}
+
 // বড় ম্যাচ শেষে ফেরার পথ: ম্যাচ চলমান থাকলে বন্ধ করে ওয়ার্ল্ডে ফেরাও (ওয়ার্ল্ড না থাকলে টাইটেলে)
 function exitToAfterMatch(){
   hide(el.victory); hide(el.defeat); hide(el.qPanel); hide(el.qHead);
@@ -2392,6 +2535,7 @@ function bindInput(){
   el.setSound.addEventListener('click', () => setSound(!G.settings.sound));
   el.btnQuit.addEventListener('click', () => {
     togglePause(false);
+    if(DRILL.active){ closeDrill(); return; }
     if(REVIEW.active){ closeReview(); return; }
     if(MATCH.isActive()){ exitToAfterMatch(); return; }
     if(G.battle && G.battle.sessionId && G.battle.phase !== 'over') api('endBattleSession', { sessionId: G.battle.sessionId, outcome: 'abandoned' });
@@ -2403,6 +2547,7 @@ function bindInput(){
   el.dropBtn.addEventListener('click', () => MATCH.jumpNow());
   el.mhPrompt.addEventListener('click', () => MATCH.usePrompt());
   el.qClose.addEventListener('click', () => {
+    if(DRILL.active){ closeDrill(); return; }
     if(REVIEW.active){ closeReview(); return; }
     MATCH.closePanel();
   });
@@ -2703,6 +2848,7 @@ function renderWorlds(){
     const total = w.totalChapters || 0, cleared = w.clearedChapters || 0;
     const playable = (w.chapters || []).length > 0;
     const cur = w.id === curId;
+    const drillBtn = playable ? `<button class="btn small ghost" data-drill="${esc(w.id)}">🎯 অভ্যাস মাঠ</button>` : '';
     let btn = '';
     if(playable){
       btn = cur
@@ -2717,7 +2863,7 @@ function renderWorlds(){
       <div class="wc-meta">${playable
         ? `অধ্যায় সম্পন্ন: <b>${cleared}/${total}</b>${w.bossUnlocked ? '<span class="wc-badge">👑 বস উন্মুক্ত</span>' : ''}`
         : 'এখনো কোনো অধ্যায় যোগ হয়নি'}</div>
-      ${btn}
+      <div class="wc-btns">${btn}${drillBtn}</div>
     </div>`;
   }).join('');
 }
@@ -2853,8 +2999,26 @@ function bindScreens(){
   el.btnFriendMatch.addEventListener('click', openFriendMatch);
   el.btnWorldsClose.addEventListener('click', closeWorlds);
   el.worldsGrid.addEventListener('click', e => {
+    const d = e.target.closest('[data-drill]');
+    if(d){ openDrillFor(d.dataset.drill); return; }
     const b = e.target.closest('[data-world]');
     if(b) enterWorldFromPicker(b.dataset.world);
+  });
+  el.btnDrillClose.addEventListener('click', () => {
+    AU.sfx('click');
+    hide(el.drill);
+    show(el.worlds);
+    renderWorlds();
+  });
+  el.drillGrid.addEventListener('click', e => {
+    const b = e.target.closest('[data-drill-ch]');
+    if(!b || !drillWorld) return;
+    const ch = drillWorld.chapters.find(c => c.id === b.dataset.drillCh);
+    startDrill(b.dataset.drillCh, ch ? (ch.title || 'অভ্যাস') : 'অভ্যাস');
+  });
+  el.btnDrillWhole.addEventListener('click', () => {
+    if(!drillWorld) return;
+    startDrill(drillWorld.chapters.map(c => c.id).join(','), 'পুরো বিষয়');
   });
   el.btnLogout.addEventListener('click', () => {
     try{ localStorage.removeItem('tuition_logged_student'); }catch(e){}
