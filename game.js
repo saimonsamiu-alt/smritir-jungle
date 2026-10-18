@@ -87,7 +87,7 @@ async function api(action, params={}, tries=2){
       const r = await fetch(SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action, ...params }),
+        body: JSON.stringify({ action, ...params, stok: (typeof G !== 'undefined' && G.student && G.student.stok) || '' }),
         signal: ac.signal
       });
       clearTimeout(timer);
@@ -1145,7 +1145,7 @@ function setGateLocked(locked){
 const P = { grp: null, body: null, legL: null, legR: null, armL: null, cannon: null, visor: null,
   suitMat: null, suitDMat: null, vest: null, armorV: null,
   baseSuitColor: 0xe8edf2, baseSuitDarkColor: 0xc44e1e,
-  vel: new THREE.Vector3(), facing: 0, walkPhase: 0, speed: 5.6, regenT: 0 };
+  vel: new THREE.Vector3(), facing: 0, walkPhase: 0, speed: 7, regenT: 0 };
 
 function buildPlayer(){
   const grp = new THREE.Group();
@@ -2325,7 +2325,7 @@ function bindInput(){
   }
   function joyMove(x, y){
     let dx = x - joyOrigin.x, dy = y - joyOrigin.y;
-    const len = Math.hypot(dx, dy), max = 52;
+    const len = Math.hypot(dx, dy), max = 60;
     if(len > max){ dx = dx/len*max; dy = dy/len*max; }
     el.joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
     G.joyVec.x = dx/max; G.joyVec.y = dy/max;
@@ -2348,8 +2348,8 @@ function bindInput(){
       if(t.identifier === joyId) joyMove(t.clientX, t.clientY);
       else if(t.identifier === camId){
         const zs = (1 - 0.62 * MATCH.zoomK()) * G.settings.sens;
-        G.camYaw -= (t.clientX - camLast.x) * 0.006 * zs;
-        G.camPitch = Math.min(0.9, Math.max(0.05, G.camPitch + (t.clientY - camLast.y) * 0.004 * zs));
+        G.camYaw -= (t.clientX - camLast.x) * 0.0085 * zs;
+        G.camPitch = Math.min(1.15, Math.max(0, G.camPitch + (t.clientY - camLast.y) * 0.0055 * zs));
         camLast = {x: t.clientX, y: t.clientY};
       }
     }
@@ -2368,8 +2368,8 @@ function bindInput(){
   addEventListener('mousemove', e => {
     if(!mouseDown) return;
     const zs = (1 - 0.62 * MATCH.zoomK()) * G.settings.sens;
-    G.camYaw -= (e.clientX - camLast.x) * 0.005 * zs;
-    G.camPitch = Math.min(0.9, Math.max(0.05, G.camPitch + (e.clientY - camLast.y) * 0.0035 * zs));
+    G.camYaw -= (e.clientX - camLast.x) * 0.006 * zs;
+    G.camPitch = Math.min(1.15, Math.max(0, G.camPitch + (e.clientY - camLast.y) * 0.004 * zs));
     camLast = {x: e.clientX, y: e.clientY};
   });
   addEventListener('mouseup', () => mouseDown = false);
@@ -2453,7 +2453,7 @@ function updatePlayer(dt){
   if(G.keys['d'] || G.keys['arrowright']) mx += 1;
   mx += G.joyVec.x; mz += G.joyVec.y;
   const len = Math.hypot(mx, mz);
-  const moving = len > 0.12;
+  const moving = len > 0.08;
   if(moving){
     mx /= Math.max(1, len); mz /= Math.max(1, len);
     // movement relative to camera yaw
@@ -2956,7 +2956,7 @@ async function doLogin(){
       : res.message === 'not_registered' ? 'এই নামে কোনো অ্যাকাউন্ট নেই — প্রথমে টিউশন অ্যাপে সাইনআপ করো' : 'লগইন ব্যর্থ';
     return;
   }
-  G.student = { name: res.name, slug: res.slug, studentCode: res.studentCode };
+  G.student = { name: res.name, slug: res.slug, studentCode: res.studentCode, stok: res.stok || '' };
   setLoggedStudent(G.student);
   await bootstrapStudent();
   toast('স্বাগতম, ' + res.name + '!');

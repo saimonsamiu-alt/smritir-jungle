@@ -3,7 +3,7 @@
 // (cache:'reload') নামে, আর রানটাইম রিফ্রেশ revalidate করে। আগে GitHub Pages-এর
 // ১০-মিনিট HTTP-ক্যাশ cache.add/fetch-এর ভেতর দিয়ে পুরোনো game.js/match.js কে
 // SW-ক্যাশে ঢুকিয়ে দিত — তাই ফিক্স-ডিপ্লয়ের পরও ফোনে পুরোনো কোড চলত।
-const CACHE_NAME = 'smritir-jungle-v31';
+const CACHE_NAME = 'smritir-jungle-v32';
 const PRECACHE = [
   './',
   './index.html',
